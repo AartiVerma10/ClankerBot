@@ -1,5 +1,5 @@
 # ClankerBot
 
-This is the top readme file
+This will be the main project doc
 
-[Week 1 Submission](week1/SUBMISSION.md)
+Week1's Sumission Doc: [Week 1 Submission](week1/SUBMISSION.md)
