@@ -31,6 +31,7 @@ from textual.binding import Binding
 from textual.widgets import Header, Footer, Input, RichLog
 from textual.containers import Vertical
 
+
 load_dotenv()
 
 client = OpenAI(
@@ -38,57 +39,38 @@ client = OpenAI(
     api_key=os.environ["OPENROUTER_API_KEY"],
 )
 
-MODEL = "deepseek/deepseek-v4-flash:free"
-MAX_HISTORY_TURNS = 20   # keep last N user+assistant pairs
+MODEL = "deepseek/deepseek-chat"
+MAX_HISTORY_TURNS = 20
 
 # ---------------------------------------------------------------------------
-# Chat logic (reuse / adapt from your Week 1 submission)
+# Chat logic
 # ---------------------------------------------------------------------------
 
 def call_model(messages: list[dict]) -> str:
-    """
-    Send the full messages list to the model and return the assistant's reply text.
-    This is a blocking call. It must run in a worker thread in the TUI.
-    """
-    # TODO: implement using client.chat.completions.create()
-    pass
-
+    response = client.chat.completions.create(
+        model=MODEL, 
+        messages=messages, 
+        max_tokens=1000,
+    )
+    return response.choices[0].message.content
 
 def trim_history(messages: list[dict], max_turns: int) -> list[dict]:
-    """
-    Keep the system message and only the last `max_turns` user/assistant pairs.
+    system_msg = messages[0]
+    history = messages[1:]
+    if len(history) > max_turns * 2:
+        history = history[-(max_turns * 2):]
+    return [system_msg] + history
 
-    messages[0] is assumed to be the system message.
-    Drop oldest pairs from messages[1:] when over the limit.
-    A 'pair' is one user message + one assistant message = 2 entries.
-    """
-    # TODO: implement
-    pass
-
-
-# ---------------------------------------------------------------------------
+# -----------------------hey----------------------------------------------------
 # TUI
 # ---------------------------------------------------------------------------
 
 class ChatApp(App):
-    """A full-screen terminal chatbot."""
-
     TITLE = "Week 2 Chatbot TUI"
     CSS = """
-    Screen {
-        layout: vertical;
-    }
-
-    RichLog {
-        height: 1fr;
-        border: solid $primary;
-        padding: 0 1;
-    }
-
-    Input {
-        dock: bottom;
-        height: 3;
-    }
+    Screen { layout: vertical; }
+    RichLog { height: 1fr; border: solid $primary; padding: 0 1; }
+    Input { dock: bottom; height: 3; }
     """
 
     BINDINGS = [
@@ -114,65 +96,38 @@ class ChatApp(App):
         log.write("[bold green]Chat started.[/bold green] Ctrl+Q to quit, Ctrl+L to clear.\n")
         self.query_one(Input).focus()
 
-    # -----------------------------------------------------------------------
-    # Event handlers
-    # -----------------------------------------------------------------------
-
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Called when the user presses Enter."""
         user_text = event.value.strip()
         if not user_text:
             return
 
         event.input.clear()
-
         log = self.query_one("#log", RichLog)
         log.write(f"[bold cyan][You][/bold cyan] {user_text}\n")
 
-        # Append user message to history
         self.messages.append({"role": "user", "content": user_text})
         self.messages = trim_history(self.messages, MAX_HISTORY_TURNS)
 
-        # Run the API call in a background thread so the UI stays responsive
-        # TODO: call self.run_worker(self._get_response(), thread=True)
-        pass
+
+        self.run_worker(self._get_response(), thread=True)
 
     async def _get_response(self) -> None:
-        """
-        Fetch the model response and update the UI.
-        This runs in a background thread (called via run_worker).
-
-        Steps:
-          1. Call call_model(self.messages)  [blocking, OK in a thread]
-          2. Append the assistant reply to self.messages
-          3. Use self.call_from_thread(log.write, ...) to update the UI safely
-
-        Handle exceptions: if call_model raises, display an error in the log.
-        """
         log = self.query_one("#log", RichLog)
-        # TODO: implement
-        pass
-
-    # -----------------------------------------------------------------------
-    # Actions (bound to keyboard shortcuts)
-    # -----------------------------------------------------------------------
+        try:
+            reply = call_model(self.messages)
+            self.messages.append({"role": "assistant", "content": reply})
+            # Safe way to update UI from thread
+            self.call_from_thread(log.write, f"[bold magenta][Agent][/bold magenta] {reply}\n")
+        except Exception as e:
+            self.call_from_thread(log.write, f"[bold red]Error:[/bold red] {e}\n")
 
     def action_clear_display(self) -> None:
-        """Clear the visible log without touching conversation history."""
-        # TODO: implement
-        pass
+        self.query_one("#log", RichLog).clear()
 
     def action_clear_history(self) -> None:
-        """Reset conversation history and clear the display."""
-        # TODO: reset self.messages to just the system message
-        # TODO: clear the display
-        # TODO: write a "History cleared." notice to the log
-        pass
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
+        self.messages = [{"role": "system", "content": "You are a helpful assistant."}]
+        self.action_clear_display()
+        self.query_one("#log", RichLog).write("[yellow]History cleared.[/yellow]\n")
 
 if __name__ == "__main__":
     ChatApp().run()
