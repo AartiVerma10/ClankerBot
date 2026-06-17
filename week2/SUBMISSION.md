@@ -1,3 +1,24 @@
+# Built1
+have to 
+
+
+# Built2
+
+
+# Built3-
+Imported textual for TUI (Terminal User interface)-
+
+Using that we are making an ```class ChatApp(App):``` , initiaiing it with title, css- cascading style sheets -screen, RichLog, Input.
+
+Added Bindings to key shortcuts and connected it to the action functions. And wrote those acton function with the action prefixes in their name.
+
+
+
+
+# Project- To make own perplexity.
+
+
+
 ## Setup requirements:
 1.  - pip install textual openai requests python-dotenv
 2.  - **configure api keys**:
