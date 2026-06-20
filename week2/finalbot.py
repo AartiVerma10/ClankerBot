@@ -41,8 +41,8 @@ class AgentTUI(App):
     CSS = """
     Screen { background: #1a1a1a; }
     Horizontal { height: 1fr; }
-    #chat-container { width: 60%; border-right: solid #333333; padding: 1; }
-    #tool-container { width: 40%; padding: 1; background: #141414; }
+    #chat-container { width: 80%; border-right: solid #333333; padding: 1; }
+    #tool-container { width: 20%; padding: 1; background: #141414; }
     #chat-log, #tool-log { height: 1fr; background: transparent; }
     Input { dock: bottom; margin-top: 1; border: tall #444444; background: #222222; }
     .panel-title { text-style: bold; color: #00aaff; }

@@ -8,7 +8,7 @@ have to
 # Built3-
 Imported textual for TUI (Terminal User interface)-
 
-Using that we are making an ```class ChatApp(App):``` , initiaiing it with title, css- cascading style sheets -screen, RichLog, Input.
+Using that we are making an ```claPerss ChatApp(App):``` , initiaiing it with title, css- cascading style sheets -screen, RichLog, Input.
 
 Added Bindings to key shortcuts and connected it to the action functions. And wrote those acton function with the action prefixes in their name.
 
