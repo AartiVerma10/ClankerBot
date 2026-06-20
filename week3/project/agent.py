@@ -24,8 +24,7 @@ client = OpenAI(
     api_key=os.environ.get("OPENROUTER_API_KEY"),
 )
 
-
-MODEL = "deepseek/deepseek-chat" 
+MODEL = "openrouter/owl-alpha"
 
 
 # --- Session Management ---
@@ -45,21 +44,23 @@ def create_session() -> str:
     }
     
     file_path = os.path.join(SESSIONS_DIR, f"{session_id}.json")
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(new_session, f, indent=2)
         
     return session_id
 
 def save_session(session_id: str, messages: list, title: str = "Untitled") -> None:
-    """Updates the session file with new messages and an updated timestamp."""
+    """Updates the session file with new messages, dynamic title, and an updated timestamp."""
     file_path = os.path.join(SESSIONS_DIR, f"{session_id}.json")
     
+    # Load existing data to preserve the original 'created_at' timestamp
     if os.path.exists(file_path):
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
     else:
         data = {"created_at": datetime.now(timezone.utc).isoformat()}
         
+    # Update the dictionary with the latest state
     data.update({
         "id": session_id,
         "title": title,
@@ -67,14 +68,15 @@ def save_session(session_id: str, messages: list, title: str = "Untitled") -> No
         "messages": messages
     })
     
-    with open(file_path, "w") as f:
+    # Write everything back to the JSON file
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 def load_session(session_id: str) -> dict:
     """Load and return session dict including messages list."""
     file_path = os.path.join(SESSIONS_DIR, f"{session_id}.json")
     if os.path.exists(file_path):
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
@@ -291,23 +293,31 @@ TOOLS = [
 class Agent:
     """Core agent: loop, tools, sessions. No UI."""
 
-    def __init__(self, workspace: str = ".", session_id: str | None = None):
-        self.workspace = os.path.abspath(workspace)
+    def __init__(self, session_id=None):
+        self.title = "Untitled"
         
         if session_id:
             self.session_id = session_id
-            session_data = load_session(session_id) 
+            session_data = load_session(session_id)
+            self.title = session_data.get("title", "Untitled") 
             self.messages = session_data.get("messages", [])
         else:
-            self.session_id = create_session() 
+            self.session_id = create_session()
             self.messages = [{"role": "system", "content": build_system_prompt()}]
 
     def chat(self, user_message: str) -> str:
         """Process a single user message and return the final response."""
+        if self.title == "Untitled":
+            clean_input = user_message.strip()
+            if len(clean_input) > 35:
+                self.title = clean_input[:35] + "..."
+            else:
+                self.title = clean_input
+
         self.messages.append({"role": "user", "content": user_message})
         
         final_response = self._run_loop()
-        save_session(self.session_id, self.messages)
+        save_session(self.session_id, self.messages, self.title)
         return final_response
 
     def run_once(self, prompt: str) -> str:
@@ -320,11 +330,10 @@ class Agent:
                 model=MODEL,
                 messages=self.messages,
                 tools=TOOLS,
-                max_tokens=1000
+                max_tokens=500
             )
             
             msg = response.choices[0].message
-            # Critical Fix: Convert the Pydantic object to a dict
             self.messages.append(msg.model_dump(exclude_none=True))
 
             if not msg.tool_calls:
@@ -377,25 +386,53 @@ class REPLAgent(Agent):
 
     def run(self) -> None:
         print(f"Research Desk [Session: {self.session_id}] — Type '/quit' to exit")
+        print("Type '/sessions' to view history, or '/resume <id>' to switch.")
         print("-" * 50)
         
         while True:
             try:
                 user_input = input("\n> ").strip()
             except (EOFError, KeyboardInterrupt):
-                print("\nExiting...")
                 break
                 
             if not user_input or user_input in ("/quit", "/exit"):
                 print("Goodbye!")
                 break
+
+            # --- BONUS CHALLENGE: /sessions ---
+            if user_input == "/sessions":
+                print("\nPast Sessions:")
+                if os.path.exists(SESSIONS_DIR):
+                    files = os.listdir(SESSIONS_DIR)
+                    for f in files:
+                        if f.endswith(".json"):
+                            session_data = load_session(f.replace(".json", ""))
+                            title = session_data.get("title", "Untitled")
+                            print(f" - {f.replace('.json', '')} : {title}")
+                continue
+
+            # --- BONUS CHALLENGE: /resume <id> ---
+            if user_input.startswith("/resume "):
+                try:
+                    target_id = user_input.split(" ")[1]
+                except IndexError:
+                    print("\n[Error: Please provide a session ID. Example: /resume abc123xyz]")
+                    continue
+                    
+                file_path = os.path.join(SESSIONS_DIR, f"{target_id}.json")
+                if os.path.exists(file_path):
+                    self.session_id = target_id
+                    session_data = load_session(target_id)
+                    self.title = session_data.get("title", "Untitled")
+                    self.messages = session_data.get("messages", [])
+                    print(f"\n[Successfully resumed session: {target_id}]")
+                else:
+                    print(f"\n[Error: Session '{target_id}' not found]")
+                continue
                 
+            # If it's not a command, send it to the AI
             response = self.chat(user_input)
             print(f"\nAgent: {response}\n")
-
-    def _emit(self, event: str, **data) -> None:
-        if event == "tool_call":
-            print(f"  [Executing Tool] -> {data.get('name')}...", file=sys.stderr)
 
 
 # --- System Prompt Setup ---
@@ -412,16 +449,17 @@ def build_system_prompt() -> str:
     return f"{base_prompt}\n\n{agents_content}".strip()
 
 
-# --- Application Entry Point ---
-
 def main():
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         
         if arg == "--tui":
-            # Lazy import to prevent forcing Textual onto CLI-only users
             from tui import TUIAgent
-            app = TUIAgent()
+            # Grab the ID from the terminal command
+            resume_id = sys.argv[2] if len(sys.argv) > 2 else None
+            
+            # Pass it into the TUIAgent!
+            app = TUIAgent(session_id=resume_id)
             app.run()
         else:
             # One-shot mode

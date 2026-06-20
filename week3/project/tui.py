@@ -19,12 +19,13 @@ class TUIAgent(App, Agent):
     Input { dock: bottom; margin-top: 1; border: tall #444444; background: #222222; }
     .panel-title { text-style: bold; color: #00aaff; }
     """
-
-    def __init__(self, *args, **kwargs):
-      
+    BINDINGS = [
+        ("ctrl+c", "quit", "Quit App"),
+        ("ctrl+q", "quit", "Quit App")
+    ]
+    def __init__(self, session_id=None, *args, **kwargs):
         App.__init__(self, *args, **kwargs)
-
-        Agent.__init__(self)
+        Agent.__init__(self, session_id=session_id)
 
     def compose(self) -> ComposeResult:
         yield Header()

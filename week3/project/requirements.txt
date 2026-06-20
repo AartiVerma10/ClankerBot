@@ -1,0 +1,17 @@
+# AI and Environment
+openai
+python-dotenv
+
+# Session Management
+nanoid
+
+# Visual Dashboard (tui.py)
+textual
+
+# Web Scraping Tools (web.py)
+requests
+beautifulsoup4
+
+# Academic Paper Tools (papers.py)
+PyMuPDF
+markdownify
