@@ -93,7 +93,8 @@ then the final result is printed through the REPLAgent or TUIAgent.
 
 ##  Summary of System Changes
 
-The core agent logic has been decoupled from utility functions to establish a clean separation of concerns. Below is the mapping of core tasks, their targets, and architectural placements.
+The core agent logic has been decoupled from utility functions to establish a clean separation of concerns. 
+Below is the mapping of core tasks, their targets, and architectural placements.
 
 | Feature / Task | Target File | Action Taken | Strategic Benefit |
 | :--- | :--- | :--- | :--- |
@@ -121,4 +122,3 @@ The core agent logic has been decoupled from utility functions to establish a cl
 | **`tools/papers.py`**| **Data Deprivation & API Dropouts** | Academic lookup pipelines were completely fragile to Hugging Face API coverage gaps, yielding unhandled exceptions when requesting newly posted or niche arXiv IDs. | Built a resilient cascading exception block (`try/except`). If the standard endpoint throws a 404, an emergency scraping pipeline is initialized to capture data directly via `web_fetch`. |
 
 ---
-
