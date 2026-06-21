@@ -148,6 +148,11 @@ class Agent:
                     "content": result_json
                 })
                 
+                # --- NEW: Mid-turn session flush ---
+                # Import save_session if it's not available in scope
+                # This ensures memory is saved mid-loop!
+                save_session(self.session_id, self.messages, self.title)
+                
         return "Error: Maximum iterations reached without resolving the task."
 
     def dispatch(self, tool_call) -> str:

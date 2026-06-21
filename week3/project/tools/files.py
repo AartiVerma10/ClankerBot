@@ -1,3 +1,22 @@
+import os
+import glob as glob_module
+
+WORKSPACE_ROOT = os.path.abspath(os.environ.get("WORKSPACE_ROOT", "."))
+MAX_READ_CHARS = 12_000
+
+def resolve_path(path: str) -> str:
+    """Ensure path is within WORKSPACE_ROOT and return absolute path."""
+    full_path = os.path.normpath(os.path.join(WORKSPACE_ROOT, path))
+    if not full_path.startswith(os.path.abspath(WORKSPACE_ROOT)):
+        raise PermissionError(f"Access denied: {path} is outside the workspace.")
+    return full_path
+
+# --- The Safety Gate ---
+def ask_permission(action: str, path: str) -> bool:
+    """Safety gate for destructive actions."""
+    print(f"\n[🛡️ SAFETY GATE] The AI wants to {action} -> {path}")
+    choice = input("Allow? (y/n): ").strip().lower()
+    return choice == 'y'
 
 def read_file(path: str, start_line: int = 1, read_lines: int = 200) -> dict:
     """Read lines from a file with line numbers prepended."""
@@ -25,6 +44,10 @@ def read_file(path: str, start_line: int = 1, read_lines: int = 200) -> dict:
 
 def write_file(path: str, content: str) -> dict:
     """Write content to a file, creating directories if needed."""
+    # --- Block if user says no ---
+    if not ask_permission("WRITE", path):
+        return {"error": "User denied write permission."}
+        
     try:
         abs_path = resolve_path(path)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
@@ -36,6 +59,10 @@ def write_file(path: str, content: str) -> dict:
 
 def edit_file(path: str, operation: str, start_line: int, end_line: int | None = None, content: str | None = None) -> dict:
     """Surgically edit a file with replace, delete, or append, returning a diff."""
+    # --- Block if user says no ---
+    if not ask_permission(f"EDIT ({operation})", path):
+        return {"error": "User denied edit permission."}
+        
     try:
         abs_path = resolve_path(path)
         with open(abs_path, 'r', encoding='utf-8') as f:
