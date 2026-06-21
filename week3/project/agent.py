@@ -10,6 +10,10 @@ from dotenv import load_dotenv
 # --- New Tool Imports ---
 from tools.web import web_search, web_fetch
 from tools.papers import paper_search, read_paper
+from tools.files import read_file, write_file, edit_file, list_files
+from tools.schema import TOOLS
+
+
 
 # --- Setup ---
 load_dotenv()
@@ -90,203 +94,6 @@ def resolve_path(path: str) -> str:
         raise PermissionError(f"Access denied: {path} is outside the workspace.")
     return full_path
 
-def read_file(path: str, start_line: int = 1, read_lines: int = 200) -> dict:
-    """Read lines from a file with line numbers prepended."""
-    try:
-        abs_path = resolve_path(path)
-        with open(abs_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            
-        start_idx = max(0, start_line - 1)
-        end_idx = start_idx + read_lines
-        
-        numbered_lines = []
-        for i, line in enumerate(lines[start_idx:end_idx]):
-            numbered_lines.append(f"{start_idx + i + 1}| {line.rstrip()}")
-            
-        content = "\n".join(numbered_lines)
-        has_more = end_idx < len(lines)
-        
-        if len(content) > MAX_READ_CHARS:
-            content = content[:MAX_READ_CHARS] + "\n...[truncated]"
-            
-        return {"content": content, "total_lines": len(lines), "has_more": has_more}
-    except Exception as e:
-        return {"error": str(e)}
-
-def write_file(path: str, content: str) -> dict:
-    """Write content to a file, creating directories if needed."""
-    try:
-        abs_path = resolve_path(path)
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-        with open(abs_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        return {"content": f"Successfully wrote to {path}"}
-    except Exception as e:
-        return {"error": str(e)}
-
-def edit_file(path: str, operation: str, start_line: int, end_line: int | None = None, content: str | None = None) -> dict:
-    """Surgically edit a file with replace, delete, or append, returning a diff."""
-    try:
-        abs_path = resolve_path(path)
-        with open(abs_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-
-        start_idx = max(0, start_line - 1)
-        end_idx = end_line if end_line is not None else start_line
-        
-        old_snippet = "".join(lines[start_idx:end_idx])
-        new_lines = [line + "\n" for line in (content or "").splitlines()]
-
-        if operation == "replace":
-            lines[start_idx:end_idx] = new_lines
-        elif operation == "delete":
-            del lines[start_idx:end_idx]
-        elif operation == "append":
-            insert_pos = min(len(lines), start_idx) 
-            lines[insert_pos:insert_pos] = new_lines
-            old_snippet = "(Appending after line)"
-        else:
-            return {"error": f"Unknown operation: {operation}"}
-
-        with open(abs_path, 'w', encoding='utf-8') as f:
-            f.writelines(lines)
-            
-        new_snippet = "".join(new_lines) if operation != "delete" else "[DELETED]"
-        diff = f"--- OLD ---\n{old_snippet}\n--- NEW ---\n{new_snippet}"
-            
-        return {"content": f"Successfully performed {operation}", "diff": diff}
-    except Exception as e:
-        return {"error": str(e)}
-
-def list_files(path: str = ".", pattern: str = "*") -> dict:
-    """List files in the workspace matching a glob pattern."""
-    try:
-        abs_path = resolve_path(path)
-        search_path = os.path.join(abs_path, pattern)
-        files = glob_module.glob(search_path, recursive=True)
-        relative_files = [os.path.relpath(f, WORKSPACE_ROOT) for f in files]
-        return {"files": relative_files}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-# --- Tool Registry ---
-
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": "Read a file from the workspace",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string"},
-                    "start_line": {"type": "integer"},
-                    "read_lines": {"type": "integer"}
-                },
-                "required": ["path"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "write_file",
-            "description": "Write content to a file",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string"},
-                    "content": {"type": "string"}
-                },
-                "required": ["path", "content"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "edit_file",
-            "description": "Surgically edit a file",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string"},
-                    "operation": {"type": "string", "enum": ["replace", "delete", "append"]},
-                    "start_line": {"type": "integer"},
-                    "end_line": {"type": "integer"},
-                    "content": {"type": "string"}
-                },
-                "required": ["path", "operation", "start_line"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_files",
-            "description": "List files in workspace",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string"},
-                    "pattern": {"type": "string"}
-                }
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "Search the web for current information.",
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "web_fetch",
-            "description": "Fetch the content of a specific URL.",
-            "parameters": {
-                "type": "object",
-                "properties": {"url": {"type": "string"}},
-                "required": ["url"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "paper_search",
-            "description": "Search Hugging Face for academic papers.",
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_paper",
-            "description": "Read the full markdown content of a paper using its arXiv ID.",
-            "parameters": {
-                "type": "object",
-                "properties": {"arxiv_id": {"type": "string"}},
-                "required": ["arxiv_id"]
-            }
-        }
-    }
-]
-
 
 # --- Agent Class Hierarchy ---
 
@@ -305,23 +112,36 @@ class Agent:
             self.session_id = create_session()
             self.messages = [{"role": "system", "content": build_system_prompt()}]
 
+
+
     def chat(self, user_message: str) -> str:
         """Process a single user message and return the final response."""
-        if self.title == "Untitled":
-            clean_input = user_message.strip()
-            if len(clean_input) > 35:
-                self.title = clean_input[:35] + "..."
-            else:
-                self.title = clean_input
-
         self.messages.append({"role": "user", "content": user_message})
         
         final_response = self._run_loop()
+        
+        # --- NEW: True LLM Auto-Title ---
+        if self.title == "Untitled":
+            try:
+                title_prompt = f"Summarize this exact request in 5 words or less. Output ONLY the summary: '{user_message}'"
+                title_response = client.chat.completions.create(
+                    model=MODEL,
+                    messages=[{"role": "user", "content": title_prompt}],
+                    max_tokens=15
+                )
+                self.title = title_response.choices[0].message.content.strip().replace('"', '')
+            except Exception:
+                self.title = user_message[:35] + "..."
+
         save_session(self.session_id, self.messages, self.title)
         return final_response
+    
+
 
     def run_once(self, prompt: str) -> str:
         return self.chat(prompt)
+
+
 
     def _run_loop(self) -> str:
         """The main thinking loop for the LLM."""
