@@ -1,8 +1,32 @@
 # Built1
-have to 
-
+We are manually making the chat bot response with tag- <tool_call>...</tool_call> format so we can can catch this pattern,
+parse it and manuaaly call that function , feed into the history and loop until we can no longer need tool call.
+We are using the re module to search teh pattern and parse it.
 
 # Built2
+Here writing the tools in functions we are also adding them as tool_kit in json format and ading this in
+the model so they can use it tool=tool_kit.
+The tool_kit is in json format as it is highly effective and can be converted to string as well 
+but we can still use functions to get its properties.
+
+IN the chat bot respponse object we can retrieve the 
+```python
+        response = client.chat.completions.create(
+            model=MODEL, messages=messages, tools=tool_kit, max_tokens=200,
+        )
+        toolCall = response.choices[0].message.tool_calls
+```
+if a tool call has been made it will come in some format like this :-
+```python  [
+    ChatCompletionMessageToolCall(
+        id='call_abc123', 
+        function=Function(
+            arguments='{"query": "latest research on agents"}', 
+            name='web_search'
+        ), 
+        type='function')]
+```
+hence we can retrive the function name and use it to get result and again feed it into the history, we dont have to manually filter out patterns to see the tool usage like we did in built1.
 
 
 # Built3-
@@ -12,21 +36,13 @@ Using that we are making an ```claPerss ChatApp(App):``` , initiaiing it with ti
 
 Added Bindings to key shortcuts and connected it to the action functions. And wrote those acton function with the action prefixes in their name.
 
-
+We are using workers so when it is requesting answers from the chat bot it dosent freezes the UI , hence it will work in another thread which will be async and when it recieves the answer it will call_from_thread and send in the reply
 
 
 # Project- To make own perplexity.
 
+We are using combined built 2 and built 3 to make our own perplexity. 
 
-
-## Setup requirements:
-1.  - pip install textual openai requests python-dotenv
-2.  - **configure api keys**:
-    a `.env` file in the project root with api keys:
-    ```text
-    OPENROUTER_API_KEY=your_openrouter_key_here
-    SERPER_API_KEY=your_serper_key_here
-    ```
 
 --- 
 
