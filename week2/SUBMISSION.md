@@ -58,6 +58,7 @@ We are using combined built 2 and built 3 to make our own perplexity.
 
 ## features(thing which needed to be take care as it lead to a lot of error i couldnt fix in time.)
 * **streaming, compacting**: couldnt able to implement as it was leading to crashed and error.
+
 * **error handling**: if a website blocks the agent (e.g., 403 forbidden) or a tool fails, it logs the error clearly in the trace panel instead of freezing. This was also a problem.
 * **robust tools**:
     * `web_search`: fetches live data using serper.
@@ -65,11 +66,23 @@ We are using combined built 2 and built 3 to make our own perplexity.
     * `save_research_note`: stores the findings into markdown files in a local `/notes` folder.
 * **token usage**: had a major issue of the tokens being used , so i have to reduce it to max_tokens=2000
 
+## some of tech bugs i found while working and reason
+- **Recursive loop bug** - self.run_agent_loop() inside the for tc in msg.tool_calls loop. If the model called two tools at once, it would spawn two duplicate agent loops. It needs to execute all tools first, append the results to history, and then call the loop once.
+- **Missing Assistant Tool-Call Message**: The OpenAI API requires that the assistant message containing the tool_calls is added to the history before the tool results are added. If you skip this, the API throws a "detached tool call" error.
+
+
 ## controls
 
 * **input**: type your query in the bottom input box and hit **enter**.
 * **scroll**: use your mouse wheel or trackpad. the panels support horizontal scrolling if lines are long.
 * **quit**: press `ctrl+q` in the terminal to stop the agent.
+
+## some features i added whle making it:
+- Shortcut panel in middle which can be toggle on or off with H, it has binding links and also key board shortcuts.
+- After pressing this we can inject the context window with our research findings. Then we can ask the agent about anything on it.
+- Added a current time and date widget in the TUI.
+- WHile we are waiting for the ai is thinking text will show that it is working
+
 
 ---
 
