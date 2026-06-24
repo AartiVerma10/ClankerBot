@@ -1,4 +1,6 @@
+textual
 openai
 python-dotenv
 requests
-textual
+mcp
+trafilatura
