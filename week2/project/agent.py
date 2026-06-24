@@ -147,7 +147,7 @@ class AgentTUI(App):
     def run_agent_loop(self) -> None:
         try:
             resp = self.client.chat.completions.create(
-                model="deepseek/deepseek-chat", 
+                model="deepseek/deepseek-v4-flash", 
                 messages=self.history, 
                 tools=self.tools_schema, 
                 max_tokens=1000
