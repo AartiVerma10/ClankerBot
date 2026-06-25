@@ -14,5 +14,10 @@ Recommended workflow:
 - 3. Implement: Letting it implement.
 - 4. Commit:  Asking it the commit the changes with a description.
 
+## shell commands-
+Shell command bifercation in 1. Know read-only, 2. Known destructive- ask permission before perform 3. anything unclassifies.
+- using sandbox method and resolve path to safeguard the outer files but is not 100% correct as if paths are used through environment variables or pipes or command substitution then it wont be identifieble.
+- they are stateless and always starts fresh wont carry process from before for eg cd dosent persist.
+
 ## Built1:
 
