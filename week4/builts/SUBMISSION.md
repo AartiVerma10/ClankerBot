@@ -97,3 +97,14 @@ It focuses on not terminating the error so the ai catches it and fix it hence it
 
 
 # Built2:
+
+Aider makes the repo tree but need help through tree sitter, tree sitter parses code into AST
+AST- built in module of every language- To see which class def is written where and are being referenced where.
+As grep is dumb because if it have to find a function starts with foo it will find every string constant or anyline starting with foo which is meningless.
+
+
+### how to make repo tree:
+- first how to work with ast
+![alt text]({A264EDDC-FBFE-4969-9F2B-F8C805DBB137}.png)
+
+![alt text]({BB2E27A3-87A0-4F8E-85C7-81A4AC6A383A}.png)

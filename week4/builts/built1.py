@@ -195,3 +195,5 @@ if __name__ == "__main__":
 
     print("\nDestructive command (should pause and ask for approval):")
     print(run_command("rm -rf /tmp/does-not-exist-example"))
+
+    
