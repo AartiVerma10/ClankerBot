@@ -10,6 +10,6 @@ Week2's Submission Doc: [Week 2 Submission](week2/SUBMISSION.md)
 
 Week3's Submission Doc: [Week 3 Submission](week3/SUBMISSION.md)
 
-Week4's Submission Doc: [Week 4 Submission](week3/SUBMISSION.md)
+Week4's Submission Doc: [Week 4 Submission](week4/SUBMISSION.md)
 
 
