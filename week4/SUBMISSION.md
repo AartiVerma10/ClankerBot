@@ -103,12 +103,13 @@ AST- built in module of every language- To see which class def is written where 
 As grep is dumb because if it have to find a function starts with foo it will find every string constant or anyline starting with foo which is meningless.
 
 
-### how to make repo tree:
-- first how to work with ast
-![alt text]({A264EDDC-FBFE-4969-9F2B-F8C805DBB137}.png)
+### how to make repo tree using the list_definitions() :
+- How the repo tree works-
 
-![alt text]({BB2E27A3-87A0-4F8E-85C7-81A4AC6A383A}.png)
-
+- read the file `a=file.read()` and have it inputed in `tree=ast.parse(a).body` now the tree will consists of nodes.
+- traverse through it and check through 
+`for node in tree: if isinstance(node,ast.FunctionDef) or isinstance(node,ast.ClassDef)`
+and save `node.name` in a list 
 
 
 
