@@ -14,6 +14,10 @@ TODO_FILE = os.path.join(WORKSPACE_ROOT, ".agent_todos.json")
 
 VALID_STATUSES = {"pending", "in_progress", "completed", "blocked", "error"}
 
+
+
+
+
 def _load_todos() -> list:
     """Helper: Load todos from disk."""
     if not os.path.exists(TODO_FILE):
@@ -195,7 +199,7 @@ if __name__ == "__main__":
             "verification_method": "Run migration script and check DB schema dump."
         }
     ])
-    print(add_result)
+    print(json.dumps(add_result,indent=2))
     print("-" * 40)
 
     task_id = add_result["added_ids"][0]
@@ -207,13 +211,13 @@ if __name__ == "__main__":
     print(f"3. Attempting to mark task {task_id} as 'completed' WITHOUT evidence...")
     # This should fail and return an error because remark is empty/missing
     fail_result = mark_todo(task_id, "completed")
-    print(fail_result)
+    print(json.dumps(fail_result,indent=2))
     print("-" * 40)
 
     print(f"4. Marking task {task_id} as 'completed' WITH proper evidence...")
     # This should succeed
     success_result = mark_todo(task_id, "completed", "Ran pytest tests/test_auth.py. Exit code 0, 15 tests passed.")
-    print(success_result)
+    print(json.dumps(success_result,indent=2))
     print("-" * 40)
 
     print("5. Current Todo List State:")

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "1ec87da0",
+    "title": "Fix Auth Bug",
+    "description": "Resolve the JWT token expiration logic.",
+    "verification_method": "Run pytest tests/test_auth.py and confirm exit code 0.",
+    "status": "completed",
+    "remark": "Ran pytest tests/test_auth.py. Exit code 0, 15 tests passed."
+  },
+  {
+    "id": "2ae497cc",
+    "title": "Update DB Schema",
+    "description": "Add the last_login column to users table.",
+    "verification_method": "Run migration script and check DB schema dump.",
+    "status": "pending",
+    "remark": ""
+  }
+]
