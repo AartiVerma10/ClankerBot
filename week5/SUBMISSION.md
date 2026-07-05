@@ -23,3 +23,16 @@ Claude triggers the skill by reading SKILL.md via bash
 Claude optionally reads additional bundled files like FORMS.md as needed
 Claude proceeds with the task
 
+
+Extra features: 
+Invocation control: disable-model-invocation (only you can trigger it, e.g. /deploy — you don't want the model deciding to deploy) vs. user-invocable: false (only the model, for background knowledge).
+Arguments: /fix-issue 123 substitutes 123 into the body via a $ARGUMENTS placeholder.
+Dynamic context: a !`git diff HEAD` line in the body runs before the model sees it, so the skill arrives with live data already inlined.
+allowed-tools: pre-approving specific tools while a skill is active, so it doesn't re-prompt.
+Running in a subagent (context: fork): the skill body becomes a fresh subagent's whole task — the exact Explore-subagent pattern from Week 4 Lesson 5.
+ ![alt text]({BE2320FB-68F6-4F92-8341-0982A6EB43F6}.png)
+
+ ![alt text]({CB7B3FBF-8B23-46F7-8356-4D5A87AE2738}.png)
+ ![alt text]({41B11DEF-E083-4383-A98A-222C28DEEE9B}.png)
+
+ https://code.claude.com/docs/en/skills#control-who-invokes-a-skill
