@@ -78,6 +78,7 @@ TOOLS = [
                 "required": ["command"]
             }
         }
+
     },
     {
         "type": "function",
@@ -146,6 +147,62 @@ TOOLS = [
                     "evidence": {"type": "string", "description": "Proof of completion, such as 'Exit code 0' from a test run."}
                 },
                 "required": ["todo_index", "status", "evidence"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "grep",
+            "description": "Search for a regex pattern across files in the workspace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "The regex pattern to search for."},
+                    "path": {"type": "string", "description": "Optional specific directory or file to search within."}
+                },
+                "required": ["pattern"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_definitions",
+            "description": "Outline a Python file by listing its classes, functions, and methods.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "The relative path to the Python file."}
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_repo_map",
+            "description": "Builds a structural map of the repository showing the most referenced files and their definitions. Use this when exploring an unfamiliar codebase.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "max_files": {"type": "integer", "description": "Maximum number of top referenced files to return (default is 15)."}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delegate_exploration",
+            "description": "Spins up a read-only subagent to thoroughly explore the codebase and answer a broad question. Returns a dense, formatted digest citing files and line numbers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_description": {"type": "string", "description": "Detailed instructions on what the subagent needs to find or understand."}
+                },
+                "required": ["task_description"]
             }
         }
     }
