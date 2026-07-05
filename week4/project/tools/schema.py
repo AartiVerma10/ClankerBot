@@ -1,11 +1,4 @@
-"""
-Schema definitions for all available agent tools.
-"""
-
 TOOLS = [
-    # ---------------------------------------------------------
-    # File Operations (Week 3 ported)
-    # ---------------------------------------------------------
     {
         "type": "function",
         "function": {
@@ -69,62 +62,6 @@ TOOLS = [
             }
         }
     },
-    
-    # ---------------------------------------------------------
-    # Web & Research Tools (week 2 ported)
-    # ---------------------------------------------------------
-    {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "Search the web for current information.",
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "web_fetch",
-            "description": "Fetch the content of a specific URL.",
-            "parameters": {
-                "type": "object",
-                "properties": {"url": {"type": "string"}},
-                "required": ["url"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "paper_search",
-            "description": "Search Hugging Face for academic papers.",
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_paper",
-            "description": "Read the full markdown content of a paper using its arXiv ID.",
-            "parameters": {
-                "type": "object",
-                "properties": {"arxiv_id": {"type": "string"}},
-                "required": ["arxiv_id"]
-            }
-        }
-    },
-    
-    # ---------------------------------------------------------
-    # Autonomous Agent Tools (week 4 Execution & Planning)
-    # ---------------------------------------------------------
     {
         "type": "function",
         "function": {
@@ -139,6 +76,23 @@ TOOLS = [
                     }
                 },
                 "required": ["command"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_background_job",
+            "description": "Checks the status of a background job using its Job ID. Use this to verify if a long-running command has finished and retrieve its output.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "job_id": {
+                        "type": "integer",
+                        "description": "The integer Job ID returned when the command was started."
+                    }
+                },
+                "required": ["job_id"]
             }
         }
     },
