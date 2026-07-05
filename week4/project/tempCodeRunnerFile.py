@@ -15,6 +15,7 @@ from tools.web import web_search, web_fetch
 from tools.schema import TOOLS
 from tools.safety import log_notification 
 
+
 load_dotenv()
 
 WORKSPACE_ROOT = os.path.abspath(os.environ.get("WORKSPACE_ROOT", "."))
@@ -48,7 +49,6 @@ def create_session() -> str:
         
     return session_id
 
-
 def save_session(session_id: str, messages: list, title: str = "Untitled") -> None:
     if session_id == "temp_scout": 
         return  
@@ -70,14 +70,12 @@ def save_session(session_id: str, messages: list, title: str = "Untitled") -> No
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-
 def load_session(session_id: str) -> dict:
     file_path = os.path.join(SESSIONS_DIR, f"{session_id}.json")
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
-
 
 def delete_session(session_id: str) -> bool:
     """Deletes a session file by its unique session ID."""
@@ -86,7 +84,6 @@ def delete_session(session_id: str) -> bool:
         os.remove(file_path)
         return True
     return False
-
 
 def delegate_exploration(task_description: str) -> dict:
     print(f"\n\033[93m>> Dispatching Scout Subagent: {task_description[:50]}...\033[0m")
@@ -98,13 +95,13 @@ def delegate_exploration(task_description: str) -> dict:
 
 class Agent:
     def __init__(self, session_id=None):
-        self.session_title = "Untitled"
+        self.title = "Untitled"
         self.presentation_hook = None  # UI hook to stream tool logs
         
         if session_id:
             self.session_id = session_id
             session_data = load_session(session_id)
-            self.session_title = session_data.get("title", "Untitled") 
+            self.title = session_data.get("title", "Untitled") 
             self.messages = session_data.get("messages", [])
             
             if self.messages and self.messages[0].get("role") == "system":
@@ -113,13 +110,15 @@ class Agent:
             self.session_id = create_session()
             self.messages = [{"role": "system", "content": build_system_prompt()}]
 
-        set_active_session(self.session_id, self.session_title)
+        set_active_session(self.session_id, self.title)
+
+
 
     def chat(self, user_message: str) -> str:
         self.messages.append({"role": "user", "content": user_message})
         final_response = self._run_loop()
         
-        if self.session_title == "Untitled":
+        if self.session_title == "Untitled": # CHANGED
             try:
                 title_prompt = f"Summarize this request in 5 words or less. Output ONLY the summary: '{user_message}'"
                 title_response = client.chat.completions.create(
@@ -127,22 +126,23 @@ class Agent:
                     messages=[{"role": "user", "content": title_prompt}],
                     max_tokens=15
                 )
-                self.session_title = title_response.choices[0].message.content.strip().replace('"', '')
-                set_active_session(self.session_id, self.session_title)
+                self.session_title = title_response.choices[0].message.content.strip().replace('"', '') # CHANGED
+                set_active_session(self.session_id, self.session_title) # CHANGED
             except Exception:
-                self.session_title = user_message[:35] + "..."
-                set_active_session(self.session_id, self.session_title)
+                self.session_title = user_message[:35] + "..." # CHANGED
+                set_active_session(self.session_id, self.session_title) # CHANGED
 
-        save_session(self.session_id, self.messages, self.session_title)
+        save_session(self.session_id, self.messages, self.session_title) # CHANGED
         
         short_response = final_response[:150] + "..." if len(final_response) > 150 else final_response
         log_notification(
-            f"Prompt Completed: '{self.session_title}' - Final Remarks: {short_response}", 
+            f"Prompt Completed: '{self.session_title}' - Final Remarks: {short_response}", # CHANGED
             session_id=self.session_id,
-            session_title=self.session_title
+            session_title=self.session_title # CHANGED
         )
         
         return final_response
+
 
     def run_once(self, prompt: str) -> str:
         return self.chat(prompt)
@@ -172,7 +172,7 @@ class Agent:
                             "and update the list statuses."
                         )
                         self.messages.append({"role": "user", "content": nudge})
-                        save_session(self.session_id, self.messages, self.session_title)
+                        save_session(self.session_id, self.messages, self.title)
                         continue
                 except Exception:
                     pass 
@@ -194,7 +194,7 @@ class Agent:
                     "tool_call_id": tool_call.id,
                     "content": result_json
                 })
-                save_session(self.session_id, self.messages, self.session_title)
+                save_session(self.session_id, self.messages, self.title)
                 
         return "Error: Maximum iterations reached without resolving the task or completing the plan."
 
@@ -233,15 +233,21 @@ class Agent:
 
 class ExploreAgent(Agent):
     def __init__(self, session_id=None):
-        super().__init__(session_id="temp_scout")
-        self.session_title = "Scout"
+        self.session_title = "Untitled"  # CHANGED
+        self.presentation_hook = None
         
-        system_prompt = (
-            "You are a Scout Subagent. Your job is to thoroughly explore the codebase to answer "
-            "the orchestrator's question. Use grep, read_file, list_definitions, and get_repo_map. "
-            "You CANNOT make changes. Return a dense, highly formatted digest."
-        )
-        self.messages = [{"role": "system", "content": system_prompt}]
+        if session_id:
+            self.session_id = session_id
+            session_data = load_session(session_id)
+            self.session_title = session_data.get("title", "Untitled") # CHANGED
+            self.messages = session_data.get("messages", [])
+            
+            if self.messages and self.messages[0].get("role") == "system":
+                self.messages[0]["content"] = build_system_prompt()
+        else:
+            self.session_id = create_session()
+            self.messages = [{"role": "system", "content": build_system_prompt()}]
+
         set_active_session(self.session_id, self.session_title)
 
     def dispatch(self, tool_call) -> str:
@@ -308,7 +314,7 @@ class REPLAgent(Agent):
                         print("[Wiped current active session. Spawning new environment...]")
                         self.session_id = create_session()
                         self.messages = [{"role": "system", "content": build_system_prompt()}]
-                        self.session_title = "Untitled"
+                        self.title = "Untitled"
                 else:
                     print(f"[Error: Session '{target_id}' not found]")
                 continue
@@ -323,10 +329,10 @@ class REPLAgent(Agent):
                 if os.path.exists(file_path):
                     self.session_id = target_id
                     session_data = load_session(target_id)
-                    self.session_title = session_data.get("title", "Untitled")
-                    set_active_session(self.session_id, self.session_title) 
+                    self.title = session_data.get("title", "Untitled")
+                    set_active_session(self.session_id, self.title) 
                     self.messages = session_data.get("messages", [])
-                    print(f"\n[Successfully resumed session: {self.session_title} ({target_id})]")
+                    print(f"\n[Successfully resumed session: {self.title} ({target_id})]")
                 else:
                     print(f"\n[Error: Session '{target_id}' not found]")
                 continue
@@ -363,7 +369,6 @@ def build_system_prompt() -> str:
         with open("AGENTS.md", "r", encoding="utf-8") as f:
             agents_content = f.read()
     return f"{base_prompt}\n\n{agents_content}".strip()
-
 
 def main():
     if len(sys.argv) > 1:

@@ -92,3 +92,31 @@ PY
 + 1
 
 switching between the tui and repl type in between session.
+
+
+1. Bidirectional Interface Switching (/tui & /repl)
+You can now seamlessly bounce between the terminal and the visual dashboard without losing your conversation history.
+
+In agent.py: Added a /tui (or /ui) slash command inside the REPLAgent loop. When typed, it pauses the terminal, passes your current session_id to the Textual app, and launches the visual dashboard.
+
+In tui.py: Added a /repl command interceptor. When typed in the UI's input box, it safely shuts down the Textual app by triggering self.exit(result="SWITCH_TO_REPL").
+
+In agent.py (Main & Loop): Updated both the REPLAgent loop and the main() block to catch that "SWITCH_TO_REPL" signal so it smoothly drops you back to the exact terminal prompt you left off at.
+
+2. Session Deletion Logic
+You can now purge old or cluttered sessions directly from the interface.
+
+Backend: Added a delete_session(session_id) function in agent.py that physically deletes the JSON file from the .agent/sessions directory.
+
+Tool Engine: Mapped "delete_session": delete_session inside the dispatch method so the AI can use it (assuming you updated your schema.py).
+
+REPL Support: Added a /delete <id> command in the terminal loop. If you delete the active session, it automatically spawns a fresh, untitled session for you to continue working in.
+
+TUI Support: Added a /delete <id> interceptor in tui.py. It provides color-coded feedback in the RichLog and instantly purges the active context if you delete the session you are currently viewing.
+
+3. UI and Placeholder Updates
+Updated the placeholder text in the TUI's input box to clearly show the new capabilities: Ask agent, /delete <id>, or /repl to switch back...
+
+Updated the REPL's welcome message to show the new slash commands.
+
+Maintained the self.presentation_hook wiring so all background tool executions (like grepping or reading files) properly trigger the _emit_ui method and render cleanly in the TUI's right-hand "Tool Trace Engine" panel.
