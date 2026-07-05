@@ -9,6 +9,7 @@ single file without reading the whole thing.
 import ast
 import os
 import re
+import json
 
 WORKSPACE_ROOT = os.path.abspath(os.environ.get("WORKSPACE_ROOT", "."))
 MAX_GREP_RESULTS = 50
@@ -91,72 +92,62 @@ def grep(
         "total_matches": total_matches
     }
 
-
-def list_definitions(path: str) -> dict:
+def list_definitions(filepath):
     """
-    Parse a Python file with `ast` and return every function/class it
-    declares, in source order, with line numbers — a structural outline
-    without reading the file's full body.
+    Parses a Python file and returns a structured list of dictionaries.
+    Safely ignores non-Python files.
     """
-    target_path = resolve_path(path)
-    if not target_path or not os.path.isfile(target_path):
-        return {"error": "File not found or path escapes sandbox."}
-
-    try:
-        with open(target_path, "r", encoding="utf-8") as f:
-            source = f.read()
-        tree = ast.parse(source, filename=os.path.basename(target_path))
-    except SyntaxError as e:
-        return {"error": f"SyntaxError parsing file: {e}"}
-    except Exception as e:
-        return {"error": str(e)}
-
+    # 1. THE GUARD CLAUSE: Instantly skip anything that isn't a Python file
+    if not filepath.endswith(".py"):
+        # Return an empty list or a custom dictionary explaining it was skipped
+        return [] 
+        
     definitions = []
+    
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            source = f.read()
+        
+        # Parse the source code into an Abstract Syntax Tree
+        tree = ast.parse(source)
+        
+    except SyntaxError as e:
+        # Gracefully handle files that claim to be .py but have broken syntax
+        print(f"Syntax Error in {filepath}: {e}")
+        return [{"error": f"SyntaxError: {e}"}]
+    except Exception as e:
+        # Catch any other weird file reading errors 
+        print(f"Could not read {filepath}: {e}")
+        return []
 
-    # Walk the top-level body of the AST
+    # 2. Look only at the main trunk of the tree 
     for node in tree.body:
         if isinstance(node, ast.FunctionDef):
             definitions.append({
                 "kind": "function",
                 "name": node.name,
                 "line": node.lineno,
-                "end_line": getattr(node, "end_lineno", node.lineno)
+                "end_line": getattr(node, 'end_lineno', node.lineno) 
             })
-        elif isinstance(node, ast.AsyncFunctionDef):
-            definitions.append({
-                "kind": "async function",
-                "name": node.name,
-                "line": node.lineno,
-                "end_line": getattr(node, "end_lineno", node.lineno)
-            })
+            
         elif isinstance(node, ast.ClassDef):
             definitions.append({
                 "kind": "class",
                 "name": node.name,
                 "line": node.lineno,
-                "end_line": getattr(node, "end_lineno", node.lineno)
+                "end_line": getattr(node, 'end_lineno', node.lineno)
             })
             
-            # If it's a class, walk its body for methods so the caller 
-            # sees structure without a second tool call.
-            for subnode in node.body:
-                if isinstance(subnode, ast.FunctionDef):
+            for child in node.body:
+                if isinstance(child, ast.FunctionDef):
                     definitions.append({
                         "kind": "method",
-                        "name": subnode.name,
-                        "line": subnode.lineno,
-                        "end_line": getattr(subnode, "end_lineno", subnode.lineno)
+                        "name": child.name,
+                        "line": child.lineno,
+                        "end_line": getattr(child, 'end_lineno', child.lineno)
                     })
-                elif isinstance(subnode, ast.AsyncFunctionDef):
-                    definitions.append({
-                        "kind": "async method",
-                        "name": subnode.name,
-                        "line": subnode.lineno,
-                        "end_line": getattr(subnode, "end_lineno", subnode.lineno)
-                    })
-
-    return {"definitions": definitions}
-
+                    
+    return {"definitions":definitions}
 
 TOOLS = [
     {
@@ -208,9 +199,9 @@ TOOLS = [
 if __name__ == "__main__":
     print("Searching for top-level function definitions ('def '):")
     result = grep("def ", max_results=10)
-    print(result)
+    print(json.dumps(result,indent=4))
 
     if result and result.get("matches"):
         first_file = result["matches"][0]["file"]
         print(f"\nOutline of {first_file}:")
-        print(list_definitions(first_file))
+        print(json.dumps(list_definitions(first_file),indent=4))
