@@ -13,6 +13,21 @@ def set_active_session(session_id: str, session_title: str = "Untitled") -> None
     _plan_state["session_title"] = session_title
 
 # ... [keep add_todos and get_todos unchanged] ...
+def add_todos(todos: list[dict]) -> str:
+    """Adds new todo items to the plan. Each todo should have a 'title', 'description', and 'verification_method'."""
+    for todo in todos:
+        todo['status'] = 'pending'
+        todo['evidence'] = None
+        _plan_state["todos"].append(todo)
+    return "Todos successfully added to the plan."
+
+def get_todos() -> str:
+    """Returns the current list of todos and their statuses."""
+    if not _plan_state["todos"]:
+        return "No todos in the current plan."
+    return json.dumps(_plan_state["todos"], indent=2)
+
+
 
 def mark_todo(todo_index: int, status: str, evidence: str) -> str:
     """Marks a specific todo and logs a notification with the session title and ID."""
