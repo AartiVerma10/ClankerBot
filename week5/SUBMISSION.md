@@ -45,3 +45,50 @@ Background jobs:
 
 tui updated with the notif thingy
  Key Additions Made:Added Imports: Included os and the necessary Textual screen/container widgets (ModalScreen, Container) at the top of the file.  The NotificationModal Class: Inserted a new class defining the floating window, styled to display directly in the middle of the screen over the chat interface. It reads up to the last 15 lines from the .agent/notifications.log file.  New Binding: Added "ctrl+n" to the BINDINGS list in TUIAgent so the hotkey hint appears dynamically in the footer.  Action Method: Defined action_show_notifications(self) at the bottom of the TUIAgent class to trigger the push_screen logic whenever Ctrl+N is pressed. 
+
+ Dynamic "Thinking" Indicator: You built a custom, blinking ai is thinking... text indicator. The neat part is your logic handles it perfectly—it turns on when the request fires, stays on while tools are executing, and smartly clears out when the final message arrives or an error occurs.
+
+Dedicated Tool Trace Panel: You added a completely new UI section on the right side (#tool-container). Instead of cluttering the main chat, all backend tool executions and their results are now routed directly to this dedicated RichLog.
+
+Toggleable Shortcuts Menu: You created a hideable middle panel that lists all your keyboard bindings. You also wired up the H key to dynamically toggle the .-hidden CSS class, letting you show or hide the menu on the fly.
+
+Manual Memory Management (Save & Retrieve): You added two powerful new keyboard actions. Pressing S formats your current conversation and saves it as a Markdown file in a notes directory. Pressing R reads all those saved .md files and injects them straight into the agent's system prompt so it "remembers" past research.
+
+Live Clock & Persistent Hints: You enabled show_clock=True in the Header with a 1-second update interval to show the live date, and you added a persistent bottom bar (#persistent-hint) so the user always knows how to open the shortcuts menu.
+
+Tool Execution Wiring: You fully implemented the execution loop for three specific tools (web_search, web_fetch, and save_research_note). The script now successfully intercepts the tool calls from DeepSeek, runs your local Python functions, and feeds the responses back into the chat history array.
+
+Chat Reset: You added a quick C shortcut that clears the UI logs and wipes the agent's memory array back to just the base system prompt.
+
+1. Injecting Session Info (TUI Only)
+If you want to start a new session but give the agent the context of a past session, you use the notes injection system built into your Textual UI.
+
+Export the old session: While inside the session you want to remember, press Ctrl+S. This formats the current chat history and saves it as a Markdown file in your local notes/ directory.  
+PY
++ 1
+
+Inject into the new session: Start a brand new TUI session and press Ctrl+R. This command reads all the exported files in the notes/ folder and appends them to the agent's current memory array as a massive system prompt labeled "BACKGROUND KNOWLEDGE MANIFEST".  
+PY
++ 1
+
+The agent will now seamlessly know everything from those past sessions without overwriting your current chat UI.
+
+2. Loading a Session Completely
+If you want to completely overwrite your current workspace and jump back into an old conversation exactly where you left off, you need to load/resume it.
+
+In the Terminal REPL:
+
+Type /sessions to view a list of all saved session IDs and their titles.  
+PY
+
+Type /resume <session_id> (e.g., /resume abc123xy). This uses the load_session function to completely replace your active self.messages array with the history of the targeted session.  
+PY
++ 1
+
+In the TUI:
+Because the TUI does not currently have a /resume text command mapped in its input handler, you must load the session right when you boot up the app from the terminal by passing the ID as an argument:
+python agent.py --tui <session_id>  
+PY
++ 1
+
+switching between the tui and repl type in between session.

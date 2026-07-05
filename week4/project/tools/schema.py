@@ -234,6 +234,23 @@ TOOLS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_session",
+            "description": "Delete a specific session and its history by its unique session ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "The unique ID of the session to delete."
+                    }
+                },
+                "required": ["session_id"]
+            }
+        }
+    },
 
     # ==========================================
     # FROM tools/web.py
