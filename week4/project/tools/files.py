@@ -1,7 +1,11 @@
 import os
+import glob 
 from tools.safety import request_approval, get_colorized_diff
 
 WORKSPACE_ROOT = os.path.abspath(os.environ.get("WORKSPACE_ROOT", "."))
+MAX_READ_CHARS = 10000 # <-- Add this limit so big files don't crash the LLM
+
+
 
 
 def resolve_path(path: str) -> str:
@@ -93,7 +97,7 @@ def list_files(path: str = ".", pattern: str = "*") -> dict:
     try:
         abs_path = resolve_path(path)
         search_path = os.path.join(abs_path, pattern)
-        files = glob_module.glob(search_path, recursive=True)
+        files = glob.glob(search_path, recursive=True)
         relative_files = [os.path.relpath(f, WORKSPACE_ROOT) for f in files]
         return {"files": relative_files}
     except Exception as e:

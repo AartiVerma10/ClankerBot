@@ -2,8 +2,13 @@ import os
 import ast
 import re
 
-# ... (keep existing grep and list_definitions functions) ...
+# Add these missing definitions:
+from tools.files import resolve_path
+WORKSPACE_ROOT = os.path.abspath(os.environ.get("WORKSPACE_ROOT", "."))
+MAX_GREP_RESULTS = 50
+EXCLUDE_DIRS = {".git", "node_modules", "venv", "__pycache__"}
 
+# ... [keep the rest of your functions below] ...
 def grep(
     pattern: str,
     path: str = ".",

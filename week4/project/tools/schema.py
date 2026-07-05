@@ -1,4 +1,13 @@
+"""
+Schema definitions for all available agent tools.
+Each tool is categorized by the file it originates from.
+"""
+
 TOOLS = [
+    # ==========================================
+    # FROM tools/files.py
+    # File reading, writing, and listing operations
+    # ==========================================
     {
         "type": "function",
         "function": {
@@ -62,6 +71,11 @@ TOOLS = [
             }
         }
     },
+
+    # ==========================================
+    # FROM tools/exec.py
+    # Shell command execution and background job monitoring
+    # ==========================================
     {
         "type": "function",
         "function": {
@@ -78,7 +92,6 @@ TOOLS = [
                 "required": ["command"]
             }
         }
-
     },
     {
         "type": "function",
@@ -97,6 +110,11 @@ TOOLS = [
             }
         }
     },
+
+    # ==========================================
+    # FROM tools/plan.py
+    # Todo list and state tracking
+    # ==========================================
     {
         "type": "function",
         "function": {
@@ -150,6 +168,11 @@ TOOLS = [
             }
         }
     },
+
+    # ==========================================
+    # FROM tools/search.py
+    # Codebase navigation and AST extraction
+    # ==========================================
     {
         "type": "function",
         "function": {
@@ -192,6 +215,11 @@ TOOLS = [
             }
         }
     },
+
+    # ==========================================
+    # FROM agent.py
+    # Subagent delegation
+    # ==========================================
     {
         "type": "function",
         "function": {
@@ -203,6 +231,39 @@ TOOLS = [
                     "task_description": {"type": "string", "description": "Detailed instructions on what the subagent needs to find or understand."}
                 },
                 "required": ["task_description"]
+            }
+        }
+    },
+
+    # ==========================================
+    # FROM tools/web.py
+    # Web fetching and searching capabilities
+    # ==========================================
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web for current information using Google Serper.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query to look up on the web."}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_fetch",
+            "description": "Fetch the text content of a specific URL.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL of the webpage to fetch."}
+                },
+                "required": ["url"]
             }
         }
     }

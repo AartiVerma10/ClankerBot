@@ -13,6 +13,7 @@ from tools.plan import add_todos, get_todos, mark_todo, set_active_session
 from tools.search import grep, list_definitions, get_repo_map
 from tools.schema import TOOLS
 from tools.safety import log_notification 
+from tools.web import  web_search, web_fetch
 
 load_dotenv()
 
