@@ -59,6 +59,30 @@ This feature introduces a dynamic, persona-based security and logic audit.
 *   **Attack Vectors:** The agent evaluates generated code against specific security and stability criteria: path traversal risks, injection flaws, concurrency issues, and unhandled edge cases.
 *   **Outcome:** Rather than attempting to "fix" the output, the agent produces a raw, bulleted list of critical flaws, edge cases, and a final verdict on whether the code is safe to deploy.
 
+### 6. Spinner and Live Narration
+These features provide real-time transparency and feedback, ensuring the system state is always visible to the user.
+
+*   **Spinner Animation:** A background thread dynamically overwrites the terminal line with a rotating spinner character. This provides instant visual confirmation that the agent is actively processing requests, eliminating uncertainty regarding system responsiveness.
+*   **Live Narration Mode:** Before invoking a tool, the agent intercepts the intent and maps the action to a human-readable English sentence. The system uses terminal control codes to instantly erase the spinner line and replace it with a persistent, cyan-colored "Agent Thought" rationale. 
+*   **TUI Integration:** In the Textual User Interface, tool executions are routed to a dedicated, high-density log panel on the right side of the screen. This ensures that background actions remain visible without cluttering the main interaction flow.
+*   **Professional Feedback:** The cascading effect—where the spinner vanishes and the rationale prints before a tool executes—proves that the agent is actively reasoning about the environment rather than operating as an opaque black box.
+
+### 7. MCP Integration and Component Pipeline
+
+The system utilizes three primary components to bridge the gap between the LLM and external data sources like the GitHub API.
+
+*   **Configuration (`config.json`):** This file acts as the system blueprint. It defines which MCP servers exist, specifies the commands used to boot them, and outlines the required environment variables for each connection. When the agent boots, it reads this file, locates the `mcp_servers` entry, and launches the server as a subprocess.
+*   **The Server (`github_mcp.py`):** This acts as an independent FastMCP server. It validates the `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable upon startup to ensure secure authentication. The server uses the `@mcp.tool()` decorator to register Python functions—such as `list_my_repos`—as compliant tools, automatically converting docstrings into JSON schemas that the LLM can interpret. It maintains a continuous loop listening for requests over standard input/output.
+*   **The Bridge (`mcp_bridge.py`):** This module serves as the connective tissue for the architecture.
+    *   **Lifecycle Management:** It utilizes an `AsyncExitStack` to manage the subprocess lifecycles defined in the configuration, ensuring sessions remain alive while the agent is active.
+    *   **Tool Discovery:** It queries the server for available tools and translates them into the native OpenAI JSON function-calling schema, which are then injected into the agent's tool list.
+    *   **Request Routing (`call_tool`):** When the LLM decides to trigger a tool, `agent.py` passes the request to this bridge. The bridge asks the MCP session to execute the requested tool and formats the resulting payload back into a text string that the LLM can process.
+
+### 8. tried to make a website out this but it is still working
+* it would have shown the architecture of the project in read only form all the tools listed in one pop up with hyper links connecting to the 
+actual file location and it would have its connected terminal and the tui, but thi s task would later be completed when i have more time as it had to tackle some permissio issues
+  
+
 ---
 
 # Transitioning from Week 4 to Week 5
