@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CODE SCOUT // ART NOUVEAU</title>
+    <style>
+        :root {
+            --cream: #F4EEDD;
+            --sage: #7A8B7A;
+            --deep-teal: #2F4F4F;
+            --mustard: #C5A059;
+        }
+        body { background-color: var(--cream); color: var(--deep-teal); font-family: 'Georgia', serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        .workspace { display: flex; flex: 1; padding: 20px; gap: 20px; }
+        .sidebar { width: 300px; border-right: 1px solid var(--mustard); }
+        .viewer { flex: 1; background: #fff; padding: 20px; border: 2px solid var(--deep-teal); overflow-y: auto; }
+        
+        /* Terminal Integration */
+        #agent-bridge { background: #000; color: #0f0; padding: 15px; font-family: monospace; height: 150px; overflow-y: auto; margin-top: 20px; }
+        
+        .file-item { cursor: pointer; padding: 10px; font-style: italic; border-bottom: 1px solid #ddd; }
+        .file-item:hover { color: var(--mustard); }
+    </style>
+</head>
+<body>
+    <header style="padding:20px; border-bottom: 2px solid var(--mustard); text-align: center;">
+        <h1 style="font-family:'Copperplate', serif;">CODE SCOUT // ARCHIVE</h1>
+    </header>
+
+    <div class="workspace">
+        <aside class="sidebar">
+            <h3>PROJECT_FILES</h3>
+            <div class="file-item" onclick="loadContent('agent.py')">» agent.py (REPL Core)</div>
+            <div class="file-item" onclick="loadContent('tui.py')">» tui.py (Visual Engine)</div>
+            <div class="file-item" onclick="loadContent('notes/tui_session_L9iyf4nk.md')">» View Current Notes</div>
+        </aside>
+        
+        <main class="viewer">
+            <div id="code-display">SELECT_SCROLL_TO_READ...</div>
+            
+            <!-- Bridge to your running Agent -->
+            <div id="agent-bridge">
+                > SYSTEM: REPL & TUI AGENT BRIDGE ACTIVE. 
+                > Status: Awaiting command from python backend...
+            </div>
+        </main>
+    </div>
+
+    <script>
+    async function sendToAgent() {
+        const input = document.getElementById('chat-input').value;
+        const display = document.getElementById('code-display');
+        
+        display.innerText = "Agent is thinking...";
+        
+        const response = await fetch('http://localhost:8000/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: input})
+        });
+        
+        const data = await response.json();
+        display.innerText = data.response;
+    }
+</script>
+</body>
+</html>

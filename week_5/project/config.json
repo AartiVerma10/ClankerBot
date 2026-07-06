@@ -1,0 +1,13 @@
+{
+  "mcp_servers": {
+    "github": {
+      "command": "python",
+      "args": ["github_mcp.py"]
+    }
+  },
+  "active_skills": [
+    "commit",
+    "review",
+    "devils_advocate"
+  ]
+}
