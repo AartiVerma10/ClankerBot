@@ -15,5 +15,6 @@ beautifulsoup4
 # Academic Paper Tools (papers.py)
 PyMuPDF
 markdownify
-os
-re
+
+
+mcp

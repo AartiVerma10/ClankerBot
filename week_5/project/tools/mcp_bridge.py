@@ -28,14 +28,18 @@ class MCPManager:
             try:
                 # Merge current environment with specific token variables
                 env = os.environ.copy()
+                
+                # Process environment variables from config
                 for key, val in server_info.get("env", {}).items():
                     if val == "use_env_var":
-                        # We already loaded .env, so it's in os.environ
-                        pass 
+                        # Ensure the key exists in our environment (loaded from .env)
+                        if key not in env:
+                            print(f"[MCP] Warning: {key} not found in .env file")
                     else:
-                        # Fallback if hardcoded in config (not recommended)
+                        # Fallback if hardcoded in config
                         env[key] = val
 
+                # Use explicit command and args for Windows compatibility
                 server_params = StdioServerParameters(
                     command=server_info["command"],
                     args=server_info.get("args", []),
@@ -60,17 +64,20 @@ class MCPManager:
         """Fetches tools from all connected MCP servers."""
         all_tools = []
         for server_name, session in self.servers.items():
-            response = await session.list_tools()
-            for tool in response.tools:
-                # Format to match OpenAI's expected tool schema
-                all_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": f"[{server_name} MCP] {tool.description}",
-                        "parameters": tool.inputSchema
-                    }
-                })
+            try:
+                response = await session.list_tools()
+                for tool in response.tools:
+                    # Format to match OpenAI's expected tool schema
+                    all_tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": f"[{server_name} MCP] {tool.description}",
+                            "parameters": tool.inputSchema
+                        }
+                    })
+            except Exception as e:
+                print(f"[MCP] Error fetching tools from {server_name}: {str(e)}")
         return all_tools
 
     async def call_tool(self, tool_name: str, args: dict):

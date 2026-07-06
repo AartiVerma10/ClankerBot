@@ -1,10 +1,52 @@
-# Week 5 
+# Week 5: Code Scout Project Documentation
 
-new architecture
-![alt text]({9D1F3EB2-A658-4B92-B7C9-5A06DD818220}.png)
+![New Architecture]({9D1F3EB2-A658-4B92-B7C9-5A06DD818220}.png)
 
-Here is a comprehensive breakdown of everything we have built for your Week 5 Capstone, how it functions, and the specific engineering problems it solves.You have successfully transformed Code Scout from a rigid, hardcoded script into a modular, extensible AI platform.1. The Skills Engine (skills/ directory & load_skill)What we did: We created a skills/ directory to store Markdown files (like commit.md and review.md) and added a load_skill tool to agent.py.
-How it works: Instead of hardcoding complex instructions into Python, you write plain-English runbooks in Markdown. When the user asks the agent to perform a specific task, the agent uses load_skill to read the file and dynamically injects those instructions into its active memory.
-Problems it solves:  System Prompt Bloat: If you put every rule for every task into the main system prompt, the AI gets confused and consumes too many tokens (costing money and slowing it down). This solves that via Progressive Disclosure—the agent only loads the rules for code reviews when it is actually doing a code review.Zero-Code Extensibility: You can now teach the agent new behaviors (e.g., how to deploy to AWS, how to write a specific type of test) simply by dropping a new .md file into the folder, without writing a single line of Python.2. Configuration as Code (config.json)What we did: We moved tool registries and active skills out of the Python code and into a central config.json file.
-How it works: When agent.py boots up, it reads this JSON file to understand which external servers (like GitHub) and skills it should load.
-Problems it solves:  Hardcoding Brittleness: Previously, adding a new tool meant digging into agent.py, updating dictionaries, and importing new modules. Now, your agent is a generic "engine" that configures itself based on this file.Scalability: If you want to share this agent with a teammate, they can customize their own config.json without breaking the core application.3. Model Context Protocol (MCP) Integration (mcp_bridge.py)What we did: We implemented an asynchronous MCP Manager that reads your config file and connects to standard MCP servers using the mcp Python SDK.How it works: The bridge spins up a secure connection (via stdio) to external applications like the github-mcp-server. It queries the server for its available tools, translates them into a format the OpenAI/DeepSeek model understands, and routes the AI's commands back to the server.Problems it solves:The "API Wrapper" Nightmare: Historically, if you wanted your agent to use GitHub, you had to write hundreds of lines of code to handle GitHub's API, authentication, and error handling. MCP standardizes this.Infinite Capabilities: Because of this bridge, your agent can now connect to any MCP-compliant server in the world (e.g., Slack, PostgreSQL, Google Drive) just by adding three lines to your config.json.4. Enterprise-Grade Security (.env integration)What we did: We separated your sensitive credentials (like the GitHub Personal Access Token) from the source code.How it works: Your config.json points to an environment variable, and the MCPManager pulls the actual secret key from your hidden .env file at runtime to authenticate the connection.Problems it solves:Credential Leaks: Hardcoding API keys in code or config files is the #1 way developers get hacked when they push code to GitHub. Your system is now secure by default.The Final Result: What Code Scout Can Do NowBy combining these four elements, your agent is now capable of highly complex, autonomous workflows.Example of an unlocked capability:You can tell Code Scout: "Review the recent changes in my repo and open a GitHub issue if there are bugs."Skills: It will use load_skill to read review.md, giving it a strict checklist of what constitutes a bug.Core Tools: It will use its native run_command and read_file tools to analyze your local code.  MCP Tools: It will use the GitHub MCP server to securely log into your GitHub account and execute the create_issue tool, all completely autonomously.
+I have transformed Code Scout from a rigid, hardcoded script into a modular, extensible AI platform. This document outlines the architecture, the specific features implemented, and the engineering problems solved[cite: 9].
+
+## Architecture Overview
+
+| ID | Title | Reference |
+| :--- | :--- | :--- |
+| 1 | Skills Engine | skills/ directory |
+| 2 | Config System | config.json |
+| 3 | MCP Bridge | mcp_bridge.py |
+| 4 | UI/TUI Updates | tui.py |
+| 5 | Background Jobs | exec.py |
+| 6 | Saving/Memory | notes/ directory |
+
+## Core Modules
+
+### 1. Skills Engine
+I implemented a directory based system for skills. Each skill is a folder containing a SKILL.md file with YAML frontmatter. I use a load_skill tool to dynamically inject procedure instructions into my active memory when needed[cite: 9]. This approach solves system prompt bloat through progressive disclosure and allows for zero-code extensibility[cite: 2].
+
+### 2. Configuration as Code
+I moved tool registries and active skills into config.json. My agent now acts as an engine that reads this file at startup, decoupling logic from data[cite: 9]. This fixes hardcoding brittleness and allows for environment-specific configurations[cite: 2].
+
+### 3. Model Context Protocol Integration
+I implemented mcp_bridge.py to manage connections to MCP servers. It establishes secure connections via stdio, queries for tools, maps them to an OpenAI compatible schema, and routes commands via the dispatch method in agent.py[cite: 8]. This enables me to connect to any MCP-compliant server[cite: 2].
+
+### 4. Background Job System
+I implemented an asynchronous daemon thread in exec.py to monitor long running processes[cite: 9].
+* Interrupt-to-Background: I can interrupt a running command and push it to the background without killing the process[cite: 9].
+* Daemon Job Monitoring: A background thread continuously watches async jobs and captures output upon completion[cite: 9].
+* Agent Polling: I am aware of background tasks and can check their status using check_background_job while working on other items[cite: 9].
+* Notification System: Progress is logged to .agent/notifications.log. I can type /notifs in the REPL to view the latest updates[cite: 9].
+
+## UI and Memory Management
+
+### UI Enhancements
+1. Tool Trace Panel: Backend tool executions route to a dedicated log on the right side of the TUI[cite: 9].
+2. Thinking Indicator: I implemented a blinking text indicator to show processing status[cite: 9].
+3. Notification Modal: Ctrl+N triggers a floating window displaying updates from notifications.log[cite: 9].
+4. Toggleable Shortcuts: The H key toggles a hidden panel that lists keyboard bindings[cite: 9].
+5. Tool Execution: I implemented the execution loop for web_search, web_fetch, and save_research_note[cite: 9].
+
+### Memory and Session Management
+1. Manual Memory (Ctrl+S/Ctrl+R): I save the current conversation as a Markdown file in the notes/ directory. Pressing Ctrl+R reads saved files and injects them into my memory as a background knowledge manifest[cite: 9].
+2. Save Commands: I implemented /save1 to export active memory and /save2 to export the complete history from disk. These exports filter out raw system and tool data to maintain readability[cite: 9].
+3. Bidirectional Switching: I enabled movement between the terminal and TUI using the /tui and /repl commands[cite: 9].
+4. Session Deletion: I added a delete_session function and mapped it to /delete <id> in both the REPL and TUI[cite: 9].
+
+### Tool Call Visualization
+I added a spinner animation that dynamically overwrites the current terminal line with the name of the tool currently being executed. This provides real-time feedback without cluttering the console with logs[cite: 9].

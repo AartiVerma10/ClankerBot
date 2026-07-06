@@ -52,7 +52,8 @@ def load_config():
     return {"mcp_servers": {}, "active_skills": []}
 
 def load_skill_content(skill_name: str) -> str:
-    """Loads a markdown skill procedure from the skills directory[cite: 3]."""
+    """Loads a markdown skill procedure from the skills directory."""
+    # UPDATED: Week 5 Directory structure expects skills/{skill_name}/SKILL.md
     skill_path = os.path.join("skills", skill_name, "SKILL.md")
     if os.path.exists(skill_path):
         with open(skill_path, "r", encoding="utf-8") as f:
@@ -219,10 +220,10 @@ class REPLAgent(Agent):
         self.presentation_hook = self._emit_cli
 
     def _emit_cli(self, event: str, **data) -> None:
+        # UPDATED: Overwrites the spinner text in-place when a tool is called, without flickering
         if event == "tool_call":
-            self.spinner.update_msg(f"Executing: {data.get('name')}...")
-        elif event == "tool_result":
-            self.spinner.update_msg("Agent is thinking...")
+            tool_name = data.get('name')
+            self.spinner.update_msg(f"Executing: {tool_name}...")
 
     def run(self) -> None:
         print("-" * 50)
