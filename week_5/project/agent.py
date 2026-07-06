@@ -93,7 +93,43 @@ class Agent:
             if not msg.tool_calls: return msg.content or ""
             
             for tool_call in msg.tool_calls:
+                # --- LIVE NARRATION MODE ---
+                name = tool_call.function.name
+                try:
+                    args = json.loads(tool_call.function.arguments)
+                except json.JSONDecodeError:
+                    args = {}
+                
+                # Map specific tools to human-readable explanations
+                narration = f"Preparing to use {name}..."
+                if name == "list_my_repos":
+                    narration = "Fetching your GitHub repositories to see what we have to work with..."
+                elif name == "read_file":
+                    narration = f"Reading the contents of '{args.get('file_path', 'the file')}' to understand its structure..."
+                elif name == "write_file":
+                    narration = f"Writing new changes to '{args.get('file_path', 'the file')}'..."
+                elif name == "web_search":
+                    narration = f"Searching the web for '{args.get('query', '')}' to gather up-to-date context..."
+                elif name == "run_command":
+                    narration = f"Executing terminal command: `{args.get('command', '')}`..."
+                elif name == "load_skill":
+                    narration = f"Loading the '{args.get('skill_name', '')}' skill to adapt my behavior..."
+                
+                # \033[2K\r clears the spinner line safely so the text doesn't overlap
+                print(f"\r\033[2K\033[96m[Agent Thought] 🧠 {narration}\033[0m")
+                # ---------------------------
+
+                # 1. Pause the spinner so human-in-the-loop prompts (like [y/N]) are visible
+                if hasattr(self, 'spinner') and self.spinner:
+                    self.spinner.stop()
+
+                # 2. Execute the tool (which might ask for y/N input)
                 result_json = await self.dispatch(tool_call)
+
+                # 3. Resume the spinner after the tool is done
+                if hasattr(self, 'spinner') and self.spinner:
+                    self.spinner.start()
+
                 self.messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result_json})
         return "Max iterations reached."
 
@@ -152,7 +188,8 @@ class REPLAgent(Agent):
                 if not user_input:
                     continue
                 if user_input in ("/quit", "/exit"):
-                    break
+                    print("Exiting Code Scout.")
+                    break 
 
                 # --- BACKGROUND NOTIFICATIONS ---
                 if user_input in ("/notifs", "/notifications"):
@@ -176,6 +213,77 @@ class REPLAgent(Agent):
                                 session_data = load_session(sid)
                                 print(f" - {sid} : {session_data.get('title', 'Untitled')}")
                     continue
+
+                # --- SYSTEM STATUS ---
+                if user_input == "/status":
+                    print("\n\033[94m=== SYSTEM STATUS ===\033[0m")
+                    print(f"Active Session: {self.session_title} ({self.session_id})")
+                    
+                    print("\n[MCP Servers]")
+                    if self.mcp and self.mcp.servers:
+                        for server_name in self.mcp.servers.keys():
+                            print(f" - \033[92m{server_name}\033[0m : Connected")
+                    else:
+                        print(" - None connected")
+                        
+                    print("\n[Active Skills]")
+                    skills = self.config.get("active_skills", [])
+                    if skills:
+                        for skill in skills:
+                            print(f" - {skill}")
+                    else:
+                        print(" - No skills loaded")
+                    print("=====================\n")
+                    continue
+
+
+                # --- ON-DEMAND POST-MORTEM ---
+                if user_input == "/postmortem":
+                    print("\n\033[95m[Generating Brutally Honest Post-Mortem...]\033[0m")
+                    self.spinner.update_msg("Analyzing session history...")
+                    self.spinner.start()
+                    
+                    try:
+                        # 1. Copy the current memory so we don't pollute the actual chat history
+                        pm_messages = self.messages.copy()
+                        
+                        # 2. Inject the adversarial prompt
+                        pm_prompt = (
+                            "Review our entire conversation history above. Write a brutally honest post-mortem. "
+                            "1. What was the exact goal? "
+                            "2. What strategies failed and why? "
+                            "3. What ultimately worked? "
+                            "4. What should we do differently next time? "
+                            "Format as a clean Markdown document."
+                        )
+                        pm_messages.append({"role": "user", "content": pm_prompt})
+                        
+                        # 3. Call the LLM directly (bypassing the standard tool loop)
+                        response = client.chat.completions.create(
+                            model=MODEL, 
+                            messages=pm_messages, 
+                            max_tokens=1500
+                        )
+                        pm_content = response.choices[0].message.content
+                        
+                        # 4. Save to disk
+                        os.makedirs("notes", exist_ok=True)
+                        pm_path = os.path.join("notes", f"postmortem_{self.session_id}.md")
+                        with open(pm_path, "w", encoding="utf-8") as f:
+                            f.write(f"# Session Post-Mortem ({self.session_title})\n\n")
+                            f.write(pm_content)
+                            
+                        # 5. Output to terminal
+                        print(f"\r\033[2K\033[92m[Success: Post-Mortem saved to {pm_path}]\033[0m\n")
+                        print(pm_content + "\n")
+                        print("-" * 50)
+                        
+                    except Exception as e:
+                        print(f"\r\033[2K\033[91m[Error generating post-mortem: {str(e)}]\033[0m")
+                    finally:
+                        self.spinner.stop()
+                    continue
+
 
                 # --- SAVE COMMANDS (/save1, /save2) ---
                 if user_input in ("/save1", "/save2"):
@@ -284,6 +392,9 @@ class REPLAgent(Agent):
 
             except Exception as e:
                 print(f"\n[Error: {e}]")
+        if self.exit_stack:
+            print("[Shutting down MCP connections...]")
+            await self.exit_stack.aclose()        
 
 async def main():
     agent = REPLAgent()

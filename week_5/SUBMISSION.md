@@ -1,52 +1,76 @@
-# Week 5: Code Scout Project Documentation
+# Project Overview
 
-![New Architecture]({9D1F3EB2-A658-4B92-B7C9-5A06DD818220}.png)
+Transformed Code Scout from a rigid, hardcoded script into a modular, extensible artificial intelligence platform. The system acts as an agent that actively reasons about the environment rather than operating as a black box. The platform solves blind overconfidence by switching personas to aggressively critique generated work, ensuring secure and reliable code execution.
 
-I have transformed Code Scout from a rigid, hardcoded script into a modular, extensible AI platform. This document outlines the architecture, the specific features implemented, and the engineering problems solved[cite: 9].
+# Architecture
 
-## Architecture Overview
+The architecture relies on decoupled logic and external server integrations to function as a seamless pipeline. 
 
-| ID | Title | Reference |
+*   **Skills Engine:** A directory based system where each skill is a folder containing markdown files with YAML frontmatter.
+*   **Config System:** A JSON configuration file that acts as a blueprint, decoupling logic from data and allowing environment specific configurations.
+*   **Model Context Protocol Bridge:** The connective tissue that manages the lifecycles of subprocesses, establishes secure standard input and output connections, and routes tool requests to the appropriate server.
+*   **Background Jobs:** An asynchronous daemon thread that continuously watches asynchronous jobs, captures output, and logs progress without interrupting the main workflow.
+*   **Saving and Memory:** A dedicated directory for storing conversation history as clean Markdown files, automatically extracting context and external data sources.
+
+# Features and Commands
+
+| Feature | Command | Description |
 | :--- | :--- | :--- |
-| 1 | Skills Engine | skills/ directory |
-| 2 | Config System | config.json |
-| 3 | MCP Bridge | mcp_bridge.py |
-| 4 | UI/TUI Updates | tui.py |
-| 5 | Background Jobs | exec.py |
-| 6 | Saving/Memory | notes/ directory |
+| **System Status** | `/status` | Displays the active session, connected servers, and currently loaded skills. |
+| **Textual Interface** | `/tui` | Boots a rich terminal based user interface with seamless context switching. |
+| **Active Memory Export** | `/save1` | Exports the current active memory to a clean Markdown file. |
+| **Complete History Export** | `/save2` | Retrieves and exports the complete conversation history from disk. |
+| **Session List** | `/sessions` | Lists all past and available sessions with generated titles. |
+| **Resume Session** | `/resume [id]` | Hot swaps the current context to a previous conversation state. |
+| **Delete Session** | `/delete [id]` | Permanently wipes a session from disk and spawns a fresh environment. |
+| **Background Alerts** | `/notifs` | Pulls up the most recent background task completions. |
+| **Post Mortem Review** | `/postmortem` | Forces the agent to analyze the session history and generate an honest critique. |
 
-## Core Modules
+---
 
-### 1. Skills Engine
-I implemented a directory based system for skills. Each skill is a folder containing a SKILL.md file with YAML frontmatter. I use a load_skill tool to dynamically inject procedure instructions into my active memory when needed[cite: 9]. This approach solves system prompt bloat through progressive disclosure and allows for zero-code extensibility[cite: 2].
+### Feature Deep Dive
 
-### 2. Configuration as Code
-I moved tool registries and active skills into config.json. My agent now acts as an engine that reads this file at startup, decoupling logic from data[cite: 9]. This fixes hardcoding brittleness and allows for environment-specific configurations[cite: 2].
+#### 1. UI Switching (`/tui`)
+The `/tui` command provides an alternative, high-density visualization of agent activity. When triggered, the system initiates a terminal-based user interface that renders a multi-pane environment.
+*   **Context Preservation:** The transition is seamless; the session state, message history, and current configuration are passed directly from the standard REPL to the TUI.
+*   **Bidirectional Movement:** The interface allows for switching back to the standard REPL via internal commands without losing the session, enabling the use of a rich interface for complex tasks and a simple command-line interface for quick interactions.
 
-### 3. Model Context Protocol Integration
-I implemented mcp_bridge.py to manage connections to MCP servers. It establishes secure connections via stdio, queries for tools, maps them to an OpenAI compatible schema, and routes commands via the dispatch method in agent.py[cite: 8]. This enables me to connect to any MCP-compliant server[cite: 2].
+#### 2. Memory Management (`/save1` and `/save2`)
+These commands allow for the structured offloading of intelligence from volatile memory to persistent storage. All captured knowledge is stored in a format that remains accessible and understandable for long-term review.
+*   **Active Memory Export (`/save1`):** Captures the current, immediate session context. This is designed for researchers who want to snapshot the conversation mid-flow before shifting topics.
+*   **Complete History Export (`/save2`):** Retrieves the full conversation history from the local JSON session file. This provides a comprehensive audit trail of the entire task lifecycle.
+*   **Markdown Formatting:** All saved session histories are converted from raw, machine-readable JSON into clean, structured Markdown documents.
+*   **Directory Organization:** These files are automatically organized and stored within the `notes/` directory, ensuring a centralized location for all research snapshots.
+*   **Intelligent Extraction:** Both commands strip out raw JSON, system logs, and internal tool metadata. They automatically parse the history to compile a dedicated "Sources & Context Gathered" section, identifying which files, web searches, or tools were utilized to reach conclusions.
 
-### 4. Background Job System
-I implemented an asynchronous daemon thread in exec.py to monitor long running processes[cite: 9].
-* Interrupt-to-Background: I can interrupt a running command and push it to the background without killing the process[cite: 9].
-* Daemon Job Monitoring: A background thread continuously watches async jobs and captures output upon completion[cite: 9].
-* Agent Polling: I am aware of background tasks and can check their status using check_background_job while working on other items[cite: 9].
-* Notification System: Progress is logged to .agent/notifications.log. I can type /notifs in the REPL to view the latest updates[cite: 9].
+#### 3. Live Narration Mode
+This feature provides real-time transparency during tool execution. 
+*   **Mechanism:** Before the agent invokes any tool, the system intercepts the intent and maps the tool name and arguments to a plain-English rationale.
+*   **Visual Logic:** By utilizing terminal control codes (`\r` and `\033[2K`), the system clears the "Agent is thinking..." spinner and replaces it with a persistent, human-readable thought trace. This ensures that every automated action is preceded by a clear, visible justification.
 
-## UI and Memory Management
+#### 4. On-Demand Post-Mortems (`/postmortem`)
+This feature implements automated metacognition.
+*   **Analytical Loop:** When invoked, the system bypasses the standard interaction loop and injects the entire conversation history into a highly analytical prompt.
+*   **Output:** The agent generates a structured Markdown document covering the goal, failed strategies, successful approaches, and future recommendations. This file is saved to the `notes/` directory, providing an immediate, high-quality summary for documentation or final submissions.
 
-### UI Enhancements
-1. Tool Trace Panel: Backend tool executions route to a dedicated log on the right side of the TUI[cite: 9].
-2. Thinking Indicator: I implemented a blinking text indicator to show processing status[cite: 9].
-3. Notification Modal: Ctrl+N triggers a floating window displaying updates from notifications.log[cite: 9].
-4. Toggleable Shortcuts: The H key toggles a hidden panel that lists keyboard bindings[cite: 9].
-5. Tool Execution: I implemented the execution loop for web_search, web_fetch, and save_research_note[cite: 9].
+#### 5. Adversarial Self-Review (Devil's Advocate)
+This feature introduces a dynamic, persona-based security and logic audit.
+*   **Adversarial Persona:** Upon loading the `devils_advocate` skill, the agent enters a high-cynicism mode where it is explicitly instructed to ignore social constraints and focus entirely on identifying potential failure points.
+*   **Attack Vectors:** The agent evaluates generated code against specific security and stability criteria: path traversal risks, injection flaws, concurrency issues, and unhandled edge cases.
+*   **Outcome:** Rather than attempting to "fix" the output, the agent produces a raw, bulleted list of critical flaws, edge cases, and a final verdict on whether the code is safe to deploy.
 
-### Memory and Session Management
-1. Manual Memory (Ctrl+S/Ctrl+R): I save the current conversation as a Markdown file in the notes/ directory. Pressing Ctrl+R reads saved files and injects them into my memory as a background knowledge manifest[cite: 9].
-2. Save Commands: I implemented /save1 to export active memory and /save2 to export the complete history from disk. These exports filter out raw system and tool data to maintain readability[cite: 9].
-3. Bidirectional Switching: I enabled movement between the terminal and TUI using the /tui and /repl commands[cite: 9].
-4. Session Deletion: I added a delete_session function and mapped it to /delete <id> in both the REPL and TUI[cite: 9].
+---
 
-### Tool Call Visualization
-I added a spinner animation that dynamically overwrites the current terminal line with the name of the tool currently being executed. This provides real-time feedback without cluttering the console with logs[cite: 9].
+# Transitioning from Week 4 to Week 5
+
+### Skills and Protocol Integrations
+Moved away from bloated system prompts by implementing a dynamic skills engine. The system now uses a tool to inject procedure instructions into active memory only when needed, allowing for zero code extensibility. Connected a local Model Context Protocol bridge to communicate with external APIs, querying for available tools and mapping them to native function calling schemas.
+
+### Problems Faced and Recoveries
+Implementing the local bridge required strict adherence to asynchronous task management, leading to several architectural hurdles:
+
+*   **Async Context Mismatch:** The run loop was synchronous but used asynchronous commands to open long lived server connections, causing runtime errors. Refactored the entire agent structure to be fully asynchronous.
+*   **Missing Execution Logic:** The agent apologized instead of executing commands because the manager was missing routing logic. Added a specific method to forward arguments to the session and parse the responses.
+*   **Bad Credentials:** The configuration file incorrectly hardcoded a string as an access token. Removed the hardcoded string, generated new credentials, and placed them securely in an environment file.
+*   **Graceful Shutdown Failure:** Quitting the application broke the loop but left execution stacks dangling. Added a close method at the end of the run sequence to cleanly terminate all streams.
+

@@ -81,7 +81,7 @@ TOOLS = [
                 "properties": {
                     "skill_name": {
                         "type": "string",
-                        "description": "The exact name of the skill file without the .md extension (e.g., 'commit', 'review')"
+                        "description": "The exact name of the skill file without the .md extension (e.g., 'commit', 'review','devils_advocate')"
                     }
                 },
                 "required": ["skill_name"]
