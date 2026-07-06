@@ -4,6 +4,7 @@ import json
 import asyncio
 from openai import OpenAI
 from dotenv import load_dotenv
+from contextlib import AsyncExitStack
 
 # Existing tools
 from tools.files import read_file, write_file, edit_file, list_files
@@ -32,16 +33,13 @@ load_dotenv()
 
 WORKSPACE_ROOT = os.path.abspath(os.environ.get("WORKSPACE_ROOT", "."))
 MAIN_MAX_ITERATIONS = 20
-SCOUT_MAX_ITERATIONS = 8
+MODEL = "deepseek/deepseek-chat"
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ.get("OPENROUTER_API_KEY"),
 )
 
-MODEL = "deepseek/deepseek-chat"
-
-# --- WEEK 5: CONFIGURATION LOADING ---
 def load_config():
     if os.path.exists("config.json"):
         try:
@@ -52,8 +50,6 @@ def load_config():
     return {"mcp_servers": {}, "active_skills": []}
 
 def load_skill_content(skill_name: str) -> str:
-    """Loads a markdown skill procedure from the skills directory."""
-    # UPDATED: Week 5 Directory structure expects skills/{skill_name}/SKILL.md
     skill_path = os.path.join("skills", skill_name, "SKILL.md")
     if os.path.exists(skill_path):
         with open(skill_path, "r", encoding="utf-8") as f:
@@ -62,372 +58,236 @@ def load_skill_content(skill_name: str) -> str:
 
 class Agent:
     def __init__(self, session_id=None):
-        self.config = load_config() # Week 5: Config-driven setup
+        self.config = load_config()
         self.session_title = "Untitled"
         self.presentation_hook = None
-        self.mcp = None # Will be initialized by runners
+        self.mcp = None 
         
         if session_id:
             self.session_id = session_id
             session_data = load_session(session_id)
             self.session_title = session_data.get("title", "Untitled") 
             self.messages = session_data.get("messages", [])
-            
             if self.messages and self.messages[0].get("role") == "system":
                 self.messages[0]["content"] = build_system_prompt()
         else:
             self.session_id = create_session()
             self.messages = [{"role": "system", "content": build_system_prompt()}]
-
         set_active_session(self.session_id, self.session_title)
 
-    def chat(self, user_message: str) -> str:
+    async def chat(self, user_message: str) -> str:
         self.messages.append({"role": "user", "content": user_message})
-        final_response = self._run_loop()
-        
-        if self.session_title == "Untitled":
-            try:
-                title_prompt = f"Summarize this request in 5 words or less. Output ONLY the summary: '{user_message}'"
-                title_response = client.chat.completions.create(
-                    model=MODEL,
-                    messages=[{"role": "user", "content": title_prompt}],
-                    max_tokens=15
-                )
-                self.session_title = title_response.choices[0].message.content.strip().replace('"', '')
-                set_active_session(self.session_id, self.session_title)
-            except Exception:
-                self.session_title = user_message[:35] + "..."
-                set_active_session(self.session_id, self.session_title)
-
+        final_response = await self._run_loop()
         save_session(self.session_id, self.messages, self.session_title)
         
-        short_response = final_response[:150] + "..." if len(final_response) > 150 else final_response
-        log_notification(
-            f"Prompt Completed: '{self.session_title}' - Final Remarks: {short_response}", 
-            session_id=self.session_id,
-            session_title=self.session_title
-        )
-        
+        # Log notification for TUI/Background awareness
+        short_response = final_response[:100] + "..." if len(final_response) > 100 else final_response
+        log_notification(f"Task Completed: {short_response}", session_id=self.session_id)
         return final_response
 
-    def run_once(self, prompt: str) -> str:
-        return self.chat(prompt)
-
-    def _run_loop(self) -> str:
+    async def _run_loop(self) -> str:
         for _ in range(MAIN_MAX_ITERATIONS):
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=self.messages,
-                tools=TOOLS,
-                max_tokens=1500
-            )
-            
+            response = client.chat.completions.create(model=MODEL, messages=self.messages, tools=TOOLS, max_tokens=1500)
             msg = response.choices[0].message
             self.messages.append(msg.model_dump())
-
-            if not msg.tool_calls:
-                try:
-                    todo_data = get_todos()
-                    todos = todo_data.get("todos", [])
-                    active_tasks = [t for t in todos if t.get("status") in ("pending", "in_progress", "error")]
-                    
-                    if active_tasks:
-                        nudge = (
-                            "System: Your todo list still has pending, in_progress, or error items. "
-                            "You must continue working through your plan, verify your changes with commands, "
-                            "and update the list statuses."
-                        )
-                        self.messages.append({"role": "user", "content": nudge})
-                        save_session(self.session_id, self.messages, self.session_title)
-                        continue
-                except Exception:
-                    pass 
-                
-                return msg.content or ""
+            if not msg.tool_calls: return msg.content or ""
             
             for tool_call in msg.tool_calls:
-                if self.presentation_hook:
-                    self.presentation_hook("tool_call", name=tool_call.function.name)
-                
-                result_json = self.dispatch(tool_call)
-                
-                if self.presentation_hook:
-                    self.presentation_hook("tool_result", name=tool_call.function.name, result=result_json)
-                    
-                self.messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result_json
-                })
-                save_session(self.session_id, self.messages, self.session_title)
-                
-        return "Error: Maximum iterations reached without resolving the task or completing the plan."
+                result_json = await self.dispatch(tool_call)
+                self.messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result_json})
+        return "Max iterations reached."
 
-    def dispatch(self, tool_call) -> str:
+    async def dispatch(self, tool_call) -> str:
         name = tool_call.function.name
         args = json.loads(tool_call.function.arguments)
         
-        # --- WEEK 5: DYNAMIC SKILL DISPATCHER ---
+        # Week 5 Skills Engine
         if name == "load_skill":
-            skill_name = args.get("skill_name")
-            skill_content = load_skill_content(skill_name)
-            self.messages.append({"role": "system", "content": f"INJECTED SKILL [{skill_name}]:\n{skill_content}"})
-            return json.dumps({"status": "Skill loaded into context"})
-
+            return json.dumps({"status": "Skill loaded", "content": load_skill_content(args.get("skill_name"))})
+        
         tool_map = {
-            "read_file": read_file,
-            "write_file": write_file,
-            "edit_file": edit_file,
-            "list_files": list_files,
-            "web_fetch": web_fetch,
-            "web_search": web_search,
-            "run_command": run_command,
-            "check_background_job": check_background_job,
-            "add_todos": add_todos,
-            "get_todos": get_todos,
-            "mark_todo": mark_todo,
-            "grep": grep,
-            "list_definitions": list_definitions,
-            "get_repo_map": get_repo_map,
-            "delegate_exploration": delegate_exploration,
-            "delete_session": delete_session
+            "read_file": read_file, "write_file": write_file, "edit_file": edit_file,
+            "list_files": list_files, "web_fetch": web_fetch, "web_search": web_search,
+            "run_command": run_command, "check_background_job": check_background_job,
+            "add_todos": add_todos, "get_todos": get_todos, "mark_todo": mark_todo,
+            "grep": grep, "list_definitions": list_definitions, "get_repo_map": get_repo_map,
+            "delegate_exploration": delegate_exploration, "delete_session": delete_session
         }
         
-        # 1. Check local tools first
         if name in tool_map:
-            try:
-                return json.dumps(tool_map[name](**args))
-            except Exception as e:
-                return json.dumps({"error": f"Tool execution failed: {str(e)}"})
+            try: return json.dumps(tool_map[name](**args))
+            except Exception as e: return json.dumps({"error": str(e)})
         
-        # 2. Check MCP tools if the tool wasn't found locally
+        # Week 5 MCP Bridge Integration
         if self.mcp:
-            try:
-                mcp_result = asyncio.run(self.mcp.call_tool(name, args))
-                # Only return if it was successfully routed, otherwise fall through to error
-                if "error" not in mcp_result or "not found on any connected" not in mcp_result["error"]:
-                    return json.dumps(mcp_result)
-            except Exception as e:
-                return json.dumps({"error": f"MCP tool execution failed: {str(e)}"})
-
-        return json.dumps({"error": f"Tool '{name}' is not recognized."})
-
+            try: 
+                print(f"[DEBUG] Attempting to call MCP tool: {name} with args {args}")
+                result = await self.mcp.call_tool(name, args)
+                return json.dumps(result)
+            except Exception as e: 
+                print(f"[DEBUG] MCP call failed: {str(e)}")
+                return json.dumps({"error": str(e)})
+        return json.dumps({"error": f"Tool '{name}' not found."})
 
 class REPLAgent(Agent):
     def __init__(self, session_id=None):
         super().__init__(session_id)
         self.spinner = REPLSpinner()
-        self.presentation_hook = self._emit_cli
+        self.exit_stack = None
 
-    def _emit_cli(self, event: str, **data) -> None:
-        # UPDATED: Overwrites the spinner text in-place when a tool is called, without flickering
-        if event == "tool_call":
-            tool_name = data.get('name')
-            self.spinner.update_msg(f"Executing: {tool_name}...")
+    async def run(self) -> None:
+        print(f"\nCode Scout [Session: {self.session_id}]")
+        print("Commands: /sessions, /resume, /delete, /save1, /save2, /tui")
 
-    def run(self) -> None:
-        print("-" * 50)
-        print(f"\nCode Scout [Session: {self.session_id}] — Type '/quit' to exit")
-        print("\nCommands: '/sessions', '/resume <id>', '/delete <id>', '/save1', '/save2', or '/tui' for visual mode.")
-        
-        # --- WEEK 5: INITIALIZE MCP SERVERS ---
         if MCPManager:
-            print("\n[Initializing MCP Servers...]")
-            self.mcp = MCPManager()
-            asyncio.run(self.mcp.connect_all())
-            # Fetch tools from MCP and add them to the agent's schema
-            mcp_tools = asyncio.run(self.mcp.get_all_tools())
-            if mcp_tools:
-                TOOLS.extend(mcp_tools)
-                print(f"[Added {len(mcp_tools)} tools from MCP servers to Agent Schema]")
-        else:
-            print("\n[Warning: MCP Bridge not found. Skipping MCP setup.]")
-            
-        print("-" * 50)
-        
+            self.exit_stack = AsyncExitStack()
+            self.mcp = MCPManager(self.config, self.exit_stack)
+            await self.mcp.connect_all()
+            TOOLS.extend(await self.mcp.get_all_tools())
+
         while True:
             try:
+                # In an async loop, standard input() is blocking, but acceptable for a simple REPL.
                 user_input = input("\n> ").strip()
-            except (EOFError, KeyboardInterrupt):
-                break
-                
-            if not user_input or user_input in ("/quit", "/exit"):
-                print("Goodbye!")
-                break
-                
-            if user_input in ("/notifs", "/notifications"):
-                print("\n\033[96m=== BACKGROUND NOTIFICATIONS ===\033[0m")
-                notif_path = ".agent/notifications.log"
-                if os.path.exists(notif_path):
-                    with open(notif_path, "r") as f:
-                        for line in f.readlines()[-5:]:
-                            print(line.strip())
-                else:
-                    print("No background jobs have completed yet.")
-                continue
-
-            if user_input == "/sessions":
-                print("\nPast Sessions:")
-                if os.path.exists(SESSIONS_DIR):
-                    for f in os.listdir(SESSIONS_DIR):
-                        if f.endswith(".json"):
-                            sid = f.replace(".json", "")
-                            session_data = load_session(sid)
-                            print(f" - {sid} : {session_data.get('title', 'Untitled')}")
-                continue
-            
-            # --- NEW SAVE COMMANDS (FILTERED FOR READABILITY) ---
-            if user_input in ("/save1", "/save2"):
-                is_disk = (user_input == "/save2")
-                mode_name = "COMPLETE history from disk" if is_disk else "CURRENT active memory"
-                print(f"\n[Exporting {mode_name} for session '{self.session_id}'...]")
-                
-                try:
-                    os.makedirs("notes", exist_ok=True)
-                    prefix = "save2_history" if is_disk else "save1_session"
-                    path = os.path.join("notes", f"{prefix}_{self.session_id}.md")
-                    
-                    target_messages = self.messages
-                    if is_disk:
-                        disk_data = load_session(self.session_id)
-                        target_messages = disk_data.get("messages", [])
-
-                    with open(path, "w", encoding="utf-8") as f:
-                        header = "Complete History Export" if is_disk else "Current Session Export"
-                        f.write(f"# {header}: {self.session_title} ({self.session_id})\n\n")
-                        
-                        for m in target_messages:
-                            role = m.get('role', 'unknown').lower()
-                            content = m.get('content', '')
-                            
-                            # 1. Skip system prompts and raw tool data dumps entirely
-                            if role in ('system', 'tool'):
-                                continue
-                                
-                            # 2. Write the User or Assistant chat content
-                            if content and role in ('user', 'assistant'):
-                                f.write(f"### {role.upper()}\n{content}\n\n")
-                            
-                            # 3. Extract tool calls to create a clean "Sources Used" summary
-                            if role == 'assistant' and m.get('tool_calls'):
-                                sources = []
-                                for tc in m.get('tool_calls'):
-                                    func = tc.get('function', {})
-                                    name = func.get('name', 'unknown')
-                                    args_str = func.get('arguments', '{}')
-                                    try:
-                                        args = json.loads(args_str)
-                                        # Only extract the relevant links and queries
-                                        if name == "web_fetch":
-                                            sources.append(f"- **Fetched Link:** {args.get('url', '')}")
-                                        elif name == "web_search":
-                                            sources.append(f"- **Web Search:** '{args.get('query', '')}'")
-                                        elif name == "read_file":
-                                            sources.append(f"- **Read File:** `{args.get('file_path', '')}`")
-                                    except Exception:
-                                        pass
-                                
-                                if sources:
-                                    f.write("**Sources & Context Gathered:**\n")
-                                    f.write("\n".join(sources) + "\n\n")
-
-                    print(f"\033[92m[Success: Saved clean conversation to {path}]\033[0m")
-                except Exception as e:
-                    print(f"\033[91m[Export failure: {str(e)}]\033[0m")
-                continue
-            # ----------------------------------------------------
-
-            if user_input.startswith("/delete"):
-                parts = user_input.split(maxsplit=1)
-                if len(parts) < 2:
-                    print("[Error: Specify session ID to delete. E.g., /delete abc123xyz]")
+                if not user_input:
                     continue
-                target_id = parts[1].strip()
-                if delete_session(target_id):
-                    print(f"[Successfully deleted session: {target_id}]")
-                    if self.session_id == target_id:
-                        print("[Wiped current active session. Spawning new environment...]")
-                        self.session_id = create_session()
-                        self.messages = [{"role": "system", "content": build_system_prompt()}]
-                        self.session_title = "Untitled"
-                else:
-                    print(f"[Error: Session '{target_id}' not found]")
-                continue
-
-            if user_input.startswith("/resume"):
-                parts = user_input.split(maxsplit=1)
-                if len(parts) < 2:
-                    print("[Error: Provide a session ID. Example: /resume abc123xyz]")
-                    continue
-                target_id = parts[1].strip()
-                file_path = os.path.join(SESSIONS_DIR, f"{target_id}.json")
-                if os.path.exists(file_path):
-                    self.session_id = target_id
-                    session_data = load_session(target_id)
-                    self.session_title = session_data.get("title", "Untitled")
-                    set_active_session(self.session_id, self.session_title) 
-                    self.messages = session_data.get("messages", [])
-                    print(f"\n[Successfully resumed session: {self.session_title} ({target_id})]")
-                else:
-                    print(f"\n[Error: Session '{target_id}' not found]")
-                continue
-                
-            if user_input in ("/tui", "/ui"):
-                print(f"\n[Booting up Textual UI for session '{self.session_id}'...]")
-                try:
-                    from tui import TUIAgent
-                    app = TUIAgent(session_id=self.session_id)
-                    result = app.run()
-                    
-                    if result == "SWITCH_TO_REPL":
-                        print(f"\n[Switched back to REPL for session '{self.session_id}']")
-                        print("-" * 50)
-                        continue
-                    
-                    print("Exiting Code Scout.")
+                if user_input in ("/quit", "/exit"):
                     break
-                except ImportError:
-                    print("[Error: Could not import TUIAgent from tui.py]")
-                continue
-                
-            self.spinner.update_msg("Agent is thinking...")
-            self.spinner.start()
-            try:
-                response = self.chat(user_input)
-            finally:
-                self.spinner.stop()
-                
-            print(f"\nAgent: {response}\n")
 
+                # --- BACKGROUND NOTIFICATIONS ---
+                if user_input in ("/notifs", "/notifications"):
+                    print("\n\033[96m=== BACKGROUND NOTIFICATIONS ===\033[0m")
+                    notif_path = ".agent/notifications.log"
+                    if os.path.exists(notif_path):
+                        with open(notif_path, "r") as f:
+                            for line in f.readlines()[-5:]:
+                                print(line.strip())
+                    else:
+                        print("No background jobs have completed yet.")
+                    continue
 
-def main():
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--session" and len(sys.argv) > 3:
-            session_id = sys.argv[2]
-            prompt = " ".join(sys.argv[3:])
-            agent = REPLAgent(session_id=session_id)
-            print(agent.run_once(prompt))
-        elif sys.argv[1] == "--tui":
-            from tui import TUIAgent
-            resume_id = sys.argv[2] if len(sys.argv) > 2 else None
-            app = TUIAgent(session_id=resume_id)
-            result = app.run()
-            
-            if result == "SWITCH_TO_REPL":
-                print(f"\n[Dropping into REPL for session '{app.session_id}']")
-                agent = REPLAgent(session_id=app.session_id)
-                agent.run()
-        else:
-            prompt = " ".join(sys.argv[1:])
-            agent = REPLAgent()
-            print(agent.run_once(prompt))
-    else:
-        agent = REPLAgent()
-        agent.run()
+                # --- LIST SESSIONS ---
+                if user_input == "/sessions":
+                    print("\nPast Sessions:")
+                    if os.path.exists(SESSIONS_DIR):
+                        for f in os.listdir(SESSIONS_DIR):
+                            if f.endswith(".json"):
+                                sid = f.replace(".json", "")
+                                session_data = load_session(sid)
+                                print(f" - {sid} : {session_data.get('title', 'Untitled')}")
+                    continue
+
+                # --- SAVE COMMANDS (/save1, /save2) ---
+                if user_input in ("/save1", "/save2"):
+                    is_disk = (user_input == "/save2")
+                    mode_name = "COMPLETE history from disk" if is_disk else "CURRENT active memory"
+                    print(f"\n[Exporting {mode_name} for session '{self.session_id}'...]")
+                    
+                    try:
+                        os.makedirs("notes", exist_ok=True)
+                        prefix = "save2_history" if is_disk else "save1_session"
+                        path = os.path.join("notes", f"{prefix}_{self.session_id}.md")
+                        
+                        target_messages = load_session(self.session_id).get("messages", []) if is_disk else self.messages
+
+                        with open(path, "w", encoding="utf-8") as f:
+                            header = "Complete History Export" if is_disk else "Current Session Export"
+                            f.write(f"# {header}: {self.session_title} ({self.session_id})\n\n")
+                            
+                            for m in target_messages:
+                                role = m.get('role', 'unknown').lower()
+                                content = m.get('content', '')
+                                
+                                if role in ('system', 'tool'):
+                                    continue
+                                    
+                                if content and role in ('user', 'assistant'):
+                                    f.write(f"### {role.upper()}\n{content}\n\n")
+                                
+                                if role == 'assistant' and m.get('tool_calls'):
+                                    sources = []
+                                    for tc in m.get('tool_calls', []):
+                                        func = tc.get('function', {})
+                                        name = func.get('name', 'unknown')
+                                        try:
+                                            args = json.loads(func.get('arguments', '{}'))
+                                            if name == "web_fetch":
+                                                sources.append(f"- **Fetched Link:** {args.get('url', '')}")
+                                            elif name == "web_search":
+                                                sources.append(f"- **Web Search:** '{args.get('query', '')}'")
+                                            elif name == "read_file":
+                                                sources.append(f"- **Read File:** `{args.get('file_path', '')}`")
+                                        except Exception:
+                                            pass
+                                    if sources:
+                                        f.write("**Sources & Context Gathered:**\n" + "\n".join(sources) + "\n\n")
+                        print(f"\033[92m[Success: Saved clean conversation to {path}]\033[0m")
+                    except Exception as e:
+                        print(f"\033[91m[Export failure: {str(e)}]\033[0m")
+                    continue
+
+                # --- DELETE SESSION ---
+                if user_input.startswith("/delete"):
+                    parts = user_input.split(maxsplit=1)
+                    if len(parts) < 2:
+                        print("[Error: Specify session ID to delete. E.g., /delete abc123xyz]")
+                    elif delete_session(parts[1].strip()):
+                        print(f"[Successfully deleted session: {parts[1].strip()}]")
+                        if self.session_id == parts[1].strip():
+                            self.session_id = create_session()
+                            self.messages = [{"role": "system", "content": build_system_prompt()}]
+                            self.session_title = "Untitled"
+                    else:
+                        print(f"[Error: Session '{parts[1].strip()}' not found]")
+                    continue
+
+                # --- RESUME SESSION ---
+                if user_input.startswith("/resume"):
+                    parts = user_input.split(maxsplit=1)
+                    if len(parts) < 2:
+                        print("[Error: Provide a session ID. Example: /resume abc123xyz]")
+                    else:
+                        target_id = parts[1].strip()
+                        file_path = os.path.join(SESSIONS_DIR, f"{target_id}.json")
+                        if os.path.exists(file_path):
+                            self.session_id = target_id
+                            session_data = load_session(target_id)
+                            self.session_title = session_data.get("title", "Untitled")
+                            set_active_session(self.session_id, self.session_title) 
+                            self.messages = session_data.get("messages", [])
+                            print(f"\n[Successfully resumed session: {self.session_title} ({target_id})]")
+                        else:
+                            print(f"\n[Error: Session '{target_id}' not found]")
+                    continue
+                
+                # --- TUI SWITCH ---
+                if user_input in ("/tui", "/ui"):
+                    print(f"\n[Booting up Textual UI for session '{self.session_id}'...]")
+                    try:
+                        from tui import TUIAgent
+                        if TUIAgent(session_id=self.session_id).run() == "SWITCH_TO_REPL":
+                            print(f"\n[Switched back to REPL for session '{self.session_id}']\n" + "-" * 50)
+                            continue
+                        break
+                    except ImportError:
+                        print("[Error: Could not import TUIAgent from tui.py]")
+                    continue
+                
+                # --- CHAT INTERACTION ---
+                self.spinner.update_msg("Agent is thinking...")
+                self.spinner.start()
+                try:
+                    response = await self.chat(user_input)
+                finally:
+                    self.spinner.stop()
+                print(f"\nAgent: {response}\n")
+
+            except Exception as e:
+                print(f"\n[Error: {e}]")
+
+async def main():
+    agent = REPLAgent()
+    await agent.run()
 
 if __name__ == "__main__":
-    main()
-
-def get_agent_status():
-    # Returns metadata about current active sessions
-    return {"status": "active", "sessions_dir": SESSIONS_DIR}
+    asyncio.run(main())

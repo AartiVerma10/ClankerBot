@@ -1,11 +1,8 @@
 {
   "mcp_servers": {
     "github": {
-      "command": "uv",
-      "args": ["run", "mcp-server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "use_env_var"
-      }
+      "command": "python",
+      "args": ["github_mcp.py"]
     }
   },
   "active_skills": [
