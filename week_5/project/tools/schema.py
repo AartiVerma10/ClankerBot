@@ -71,6 +71,23 @@ TOOLS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "load_skill",
+            "description": "Loads a specific markdown skill file from the skills directory to teach you a new workflow or procedure. Use this when the user asks you to perform a structured task like committing code or reviewing a pull request.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "The exact name of the skill file without the .md extension (e.g., 'commit', 'review')"
+                    }
+                },
+                "required": ["skill_name"]
+            }
+        }
+    },
 
     # ==========================================
     # FROM tools/exec.py

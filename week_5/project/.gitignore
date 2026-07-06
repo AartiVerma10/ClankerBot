@@ -1,2 +1,16 @@
 .env
 .agent
+
+# Python Cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Temporary IDE / Runner files
+tempCodeRunnerFile.py
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db

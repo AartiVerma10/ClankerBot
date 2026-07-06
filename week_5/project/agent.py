@@ -1,10 +1,11 @@
 import os
 import sys
 import json
+import asyncio
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# Tool imports
+# Existing tools
 from tools.files import read_file, write_file, edit_file, list_files
 from tools.exec import run_command, check_background_job
 from tools.plan import add_todos, get_todos, mark_todo, set_active_session 
@@ -16,14 +17,16 @@ from tools.safety import log_notification
 # Custom component imports
 from spinner import REPLSpinner
 from agent_helper.sessions import (
-    SESSIONS_DIR, 
-    create_session, 
-    save_session, 
-    load_session, 
-    delete_session, 
-    build_system_prompt
+    SESSIONS_DIR, create_session, save_session, load_session, 
+    delete_session, build_system_prompt
 )
 from agent_helper.exploration import delegate_exploration
+
+# Week 5: Import the MCP Manager
+try:
+    from tools.mcp_bridge import MCPManager
+except ImportError:
+    MCPManager = None
 
 load_dotenv()
 
@@ -38,11 +41,30 @@ client = OpenAI(
 
 MODEL = "deepseek/deepseek-chat"
 
+# --- WEEK 5: CONFIGURATION LOADING ---
+def load_config():
+    if os.path.exists("config.json"):
+        try:
+            with open("config.json", "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            pass 
+    return {"mcp_servers": {}, "active_skills": []}
+
+def load_skill_content(skill_name: str) -> str:
+    """Loads a markdown skill procedure from the skills directory[cite: 3]."""
+    skill_path = os.path.join("skills", skill_name, "SKILL.md")
+    if os.path.exists(skill_path):
+        with open(skill_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return f"Skill '{skill_name}' not found."
 
 class Agent:
     def __init__(self, session_id=None):
+        self.config = load_config() # Week 5: Config-driven setup
         self.session_title = "Untitled"
-        self.presentation_hook = None  # UI hook to stream tool logs
+        self.presentation_hook = None
+        self.mcp = None # Will be initialized by runners
         
         if session_id:
             self.session_id = session_id
@@ -144,6 +166,13 @@ class Agent:
         name = tool_call.function.name
         args = json.loads(tool_call.function.arguments)
         
+        # --- WEEK 5: DYNAMIC SKILL DISPATCHER ---
+        if name == "load_skill":
+            skill_name = args.get("skill_name")
+            skill_content = load_skill_content(skill_name)
+            self.messages.append({"role": "system", "content": f"INJECTED SKILL [{skill_name}]:\n{skill_content}"})
+            return json.dumps({"status": "Skill loaded into context"})
+
         tool_map = {
             "read_file": read_file,
             "write_file": write_file,
@@ -163,13 +192,23 @@ class Agent:
             "delete_session": delete_session
         }
         
+        # 1. Check local tools first
         if name in tool_map:
             try:
-                result_dict = tool_map[name](**args)
-                return json.dumps(result_dict)
+                return json.dumps(tool_map[name](**args))
             except Exception as e:
                 return json.dumps({"error": f"Tool execution failed: {str(e)}"})
-                
+        
+        # 2. Check MCP tools if the tool wasn't found locally
+        if self.mcp:
+            try:
+                mcp_result = asyncio.run(self.mcp.call_tool(name, args))
+                # Only return if it was successfully routed, otherwise fall through to error
+                if "error" not in mcp_result or "not found on any connected" not in mcp_result["error"]:
+                    return json.dumps(mcp_result)
+            except Exception as e:
+                return json.dumps({"error": f"MCP tool execution failed: {str(e)}"})
+
         return json.dumps({"error": f"Tool '{name}' is not recognized."})
 
 
@@ -189,6 +228,20 @@ class REPLAgent(Agent):
         print("-" * 50)
         print(f"\nCode Scout [Session: {self.session_id}] — Type '/quit' to exit")
         print("\nCommands: '/sessions', '/resume <id>', '/delete <id>', '/save1', '/save2', or '/tui' for visual mode.")
+        
+        # --- WEEK 5: INITIALIZE MCP SERVERS ---
+        if MCPManager:
+            print("\n[Initializing MCP Servers...]")
+            self.mcp = MCPManager()
+            asyncio.run(self.mcp.connect_all())
+            # Fetch tools from MCP and add them to the agent's schema
+            mcp_tools = asyncio.run(self.mcp.get_all_tools())
+            if mcp_tools:
+                TOOLS.extend(mcp_tools)
+                print(f"[Added {len(mcp_tools)} tools from MCP servers to Agent Schema]")
+        else:
+            print("\n[Warning: MCP Bridge not found. Skipping MCP setup.]")
+            
         print("-" * 50)
         
         while True:
@@ -374,10 +427,6 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-
-
-
 def get_agent_status():
     # Returns metadata about current active sessions
-    return {"status": "active", "sessions_dir": SESSIONS_DIR}    
+    return {"status": "active", "sessions_dir": SESSIONS_DIR}
