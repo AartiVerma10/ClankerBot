@@ -65,7 +65,8 @@ class TUIAgent(App, Agent):
         ("ctrl+n", "show_notifications", "Notifs"),
         ("ctrl+h", "toggle_shortcuts", "Menu Toggle"),
         ("ctrl+x", "clear_chat", "Reset Memory"),
-        ("ctrl+s", "save_notes", "Export Notes"),
+        ("ctrl+s", "save1", "Save Active"),
+        ("ctrl+a", "save2", "Save History"),
         ("ctrl+r", "retrieve_notes", "Inject Notes")
     ]
     
@@ -83,7 +84,7 @@ class TUIAgent(App, Agent):
                 yield Static("CONVERSATION LOG", classes="panel-title")
                 yield RichLog(id="chat-log", markup=True, wrap=False)
                 yield Static("", id="thinking-indicator")
-                yield Input(placeholder="Ask agent, /delete <id>, or /repl to switch back...")
+                yield Input(placeholder="Ask agent, /save1, /save2, /delete <id>, or /repl...")
             
             # Center Panel
             with Vertical(id="shortcuts-container"):
@@ -93,7 +94,8 @@ class TUIAgent(App, Agent):
                     "\n\n[bold #00ffaa]Ctrl+N[/] - Notifs"
                     "\n\n[bold #00ffaa]Ctrl+H[/] - Toggle Menu"
                     "\n\n[bold #00ffaa]Ctrl+X[/] - Clear Memory"
-                    "\n\n[bold #00ffaa]Ctrl+S[/] - Save Notes"
+                    "\n\n[bold #00ffaa]Ctrl+S[/] - Save Active"
+                    "\n\n[bold #00ffaa]Ctrl+A[/] - Save History"
                     "\n\n[bold #00ffaa]Ctrl+R[/] - Inject Notes"
                 )
                 yield Static(info, markup=True, classes="shortcut-text")
@@ -140,6 +142,15 @@ class TUIAgent(App, Agent):
         if msg == "/repl":
             self.query_one("#chat-log", RichLog).write("[yellow]Switching to REPL mode...[/yellow]")
             self.exit(result="SWITCH_TO_REPL")
+            return
+
+        # Intercept save slash commands to emulate REPL behaviors
+        if msg == "/save1":
+            self.action_save1()
+            return
+
+        if msg == "/save2":
+            self.action_save2()
             return
         
         # Intercept and process targeted removal commands directly inside the TUI context
@@ -193,21 +204,69 @@ class TUIAgent(App, Agent):
             self.messages = [self.messages[0]]
         self.query_one("#chat-log", RichLog).write("[italic gray]--- Context History Re-Aligned ---[/italic gray]")
 
-    def action_save_notes(self) -> None:
-        if len(self.messages) <= 1:
-            self.query_one("#tool-log", RichLog).write("[yellow]Empty workspace. Skipping export.[/yellow]")
-            return
-        
+    def action_save1(self) -> None:
+        """Fires via Ctrl+S shortcut or /save1 submission - Exports live RAM context."""
+        self._export_markdown_logic(is_disk=False)
+
+    def action_save2(self) -> None:
+        """Fires via Ctrl+A shortcut or /save2 submission - Exports JSON history from disk."""
+        self._export_markdown_logic(is_disk=True)
+
+    def _export_markdown_logic(self, is_disk: bool) -> None:
+        """Unified Markdown builder cleanly handling conversations and resource mapping details."""
+        mode_label = "COMPLETE history from disk" if is_disk else "CURRENT active memory"
         try:
             os.makedirs("notes", exist_ok=True)
-            path = os.path.join("notes", f"tui_session_{self.session_id}.md")
+            prefix = "save2_history" if is_disk else "save1_session"
+            path = os.path.join("notes", f"{prefix}_{self.session_id}.md")
+            
+            target_messages = self.messages
+            if is_disk:
+                disk_data = load_session(self.session_id)
+                target_messages = disk_data.get("messages", [])
+
             with open(path, "w", encoding="utf-8") as f:
-                f.write(f"# Session Export {self.session_id}\n\n")
-                for m in self.messages:
-                    f.write(f"### {m.get('role').upper()}\n{m.get('content')}\n\n")
-            self.query_one("#tool-log", RichLog).write(f"[green]Saved session mapping to: {path}[/green]")
+                header = "Complete History Export" if is_disk else "Current Session Export"
+                f.write(f"# {header}: {getattr(self, 'session_title', 'Untitled')} ({self.session_id})\n\n")
+                
+                for m in target_messages:
+                    role = m.get('role', 'unknown').lower()
+                    content = m.get('content', '')
+                    
+                    # 1. Skip system prompts and raw tool data dumps completely
+                    if role in ('system', 'tool'):
+                        continue
+                        
+                    # 2. Write the User or Assistant chat text
+                    if content and role in ('user', 'assistant'):
+                        f.write(f"### {role.upper()}\n{content}\n\n")
+                    
+                    # 3. Dynamic trace gathering to present clean context summaries
+                    if role == 'assistant' and m.get('tool_calls'):
+                        sources = []
+                        for tc in m.get('tool_calls'):
+                            func = tc.get('function', {})
+                            name = func.get('name', 'unknown')
+                            args_str = func.get('arguments', '{}')
+                            try:
+                                args = json.loads(args_str)
+                                if name == "web_fetch":
+                                    sources.append(f"- **Fetched Link:** {args.get('url', '')}")
+                                elif name == "web_search":
+                                    sources.append(f"- **Web Search:** '{args.get('query', '')}'")
+                                elif name == "read_file":
+                                    sources.append(f"- **Read File:** `{args.get('file_path', '')}`")
+                            except Exception:
+                                pass
+                        
+                        if sources:
+                            f.write("**Sources & Context Gathered:**\n")
+                            f.write("\n".join(sources) + "\n\n")
+
+            self.notify(f"Saved clean log to {path}", title="Export Complete", severity="information")
+            self.query_one("#tool-log", RichLog).write(f"[green]Successfully exported {mode_label} to {path}[/green]")
         except Exception as e:
-            self.query_one("#tool-log", RichLog).write(f"[red]Export failure: {str(e)}[/red]")
+            self.notify(f"Failed writing markdown profile: {str(e)}", title="Export Failure", severity="error")
 
     def action_retrieve_notes(self) -> None:
         if not os.path.exists("notes"):

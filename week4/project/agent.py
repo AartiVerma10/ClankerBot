@@ -1,12 +1,10 @@
 import os
 import sys
 import json
-import nanoid
-import shutil
-from datetime import datetime, timezone
 from openai import OpenAI
 from dotenv import load_dotenv
 
+# Tool imports
 from tools.files import read_file, write_file, edit_file, list_files
 from tools.exec import run_command, check_background_job
 from tools.plan import add_todos, get_todos, mark_todo, set_active_session 
@@ -15,11 +13,21 @@ from tools.web import web_search, web_fetch
 from tools.schema import TOOLS
 from tools.safety import log_notification 
 
+# Custom component imports
+from spinner import REPLSpinner
+from agent_helper.sessions import (
+    SESSIONS_DIR, 
+    create_session, 
+    save_session, 
+    load_session, 
+    delete_session, 
+    build_system_prompt
+)
+from agent_helper.exploration import delegate_exploration
+
 load_dotenv()
 
 WORKSPACE_ROOT = os.path.abspath(os.environ.get("WORKSPACE_ROOT", "."))
-SESSIONS_DIR = ".agent/sessions"
-
 MAIN_MAX_ITERATIONS = 20
 SCOUT_MAX_ITERATIONS = 8
 
@@ -29,71 +37,6 @@ client = OpenAI(
 )
 
 MODEL = "deepseek/deepseek-chat"
-
-
-def create_session() -> str:
-    os.makedirs(SESSIONS_DIR, exist_ok=True)
-    session_id = nanoid.generate(size=8)
-    
-    new_session = {
-        "id": session_id,
-        "title": "Untitled",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "messages": [{"role": "system", "content": build_system_prompt()}]
-    }
-    
-    file_path = os.path.join(SESSIONS_DIR, f"{session_id}.json")
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(new_session, f, indent=2)
-        
-    return session_id
-
-
-def save_session(session_id: str, messages: list, title: str = "Untitled") -> None:
-    if session_id == "temp_scout": 
-        return  
-
-    file_path = os.path.join(SESSIONS_DIR, f"{session_id}.json")
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    else:
-        data = {"created_at": datetime.now(timezone.utc).isoformat()}
-        
-    data.update({
-        "id": session_id,
-        "title": title,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "messages": messages
-    })
-    
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-
-def load_session(session_id: str) -> dict:
-    file_path = os.path.join(SESSIONS_DIR, f"{session_id}.json")
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
-
-def delete_session(session_id: str) -> bool:
-    """Deletes a session file by its unique session ID."""
-    file_path = os.path.join(SESSIONS_DIR, f"{session_id}.json")
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        return True
-    return False
-
-
-def delegate_exploration(task_description: str) -> dict:
-    print(f"\n\033[93m>> Dispatching Scout Subagent: {task_description[:50]}...\033[0m")
-    scout = ExploreAgent()
-    digest = scout.run_once(task_description)
-    print(f"\033[93m<< Scout Subagent Returned.\033[0m\n")
-    return {"scout_digest": digest}
 
 
 class Agent:
@@ -180,7 +123,6 @@ class Agent:
                 return msg.content or ""
             
             for tool_call in msg.tool_calls:
-                # Trigger presentation UI updates if hooked up
                 if self.presentation_hook:
                     self.presentation_hook("tool_call", name=tool_call.function.name)
                 
@@ -231,38 +173,22 @@ class Agent:
         return json.dumps({"error": f"Tool '{name}' is not recognized."})
 
 
-class ExploreAgent(Agent):
-    def __init__(self, session_id=None):
-        super().__init__(session_id="temp_scout")
-        self.session_title = "Scout"
-        
-        system_prompt = (
-            "You are a Scout Subagent. Your job is to thoroughly explore the codebase to answer "
-            "the orchestrator's question. Use grep, read_file, list_definitions, and get_repo_map. "
-            "You CANNOT make changes. Return a dense, highly formatted digest."
-        )
-        self.messages = [{"role": "system", "content": system_prompt}]
-        set_active_session(self.session_id, self.session_title)
-
-    def dispatch(self, tool_call) -> str:
-        name = tool_call.function.name
-        args = json.loads(tool_call.function.arguments)
-        read_only_tools = {
-            "read_file": read_file, "list_files": list_files, "grep": grep,
-            "list_definitions": list_definitions, "get_repo_map": get_repo_map
-        }
-        if name in read_only_tools:
-            try:
-                return json.dumps(read_only_tools[name](**args))
-            except Exception as e:
-                return json.dumps({"error": str(e)})
-        return json.dumps({"error": f"Tool '{name}' is forbidden for the Scout Subagent."})
-
-
 class REPLAgent(Agent):
+    def __init__(self, session_id=None):
+        super().__init__(session_id)
+        self.spinner = REPLSpinner()
+        self.presentation_hook = self._emit_cli
+
+    def _emit_cli(self, event: str, **data) -> None:
+        if event == "tool_call":
+            self.spinner.update_msg(f"Executing: {data.get('name')}...")
+        elif event == "tool_result":
+            self.spinner.update_msg("Agent is thinking...")
+
     def run(self) -> None:
-        print(f"Code Scout [Session: {self.session_id}] — Type '/quit' to exit")
-        print("Commands: '/sessions', '/resume <id>', '/delete <id>', or '/tui' for visual mode.")
+        print("-" * 50)
+        print(f"\nCode Scout [Session: {self.session_id}] — Type '/quit' to exit")
+        print("\nCommands: '/sessions', '/resume <id>', '/delete <id>', '/save1', '/save2', or '/tui' for visual mode.")
         print("-" * 50)
         
         while True:
@@ -295,6 +221,67 @@ class REPLAgent(Agent):
                             session_data = load_session(sid)
                             print(f" - {sid} : {session_data.get('title', 'Untitled')}")
                 continue
+            
+            # --- NEW SAVE COMMANDS (FILTERED FOR READABILITY) ---
+            if user_input in ("/save1", "/save2"):
+                is_disk = (user_input == "/save2")
+                mode_name = "COMPLETE history from disk" if is_disk else "CURRENT active memory"
+                print(f"\n[Exporting {mode_name} for session '{self.session_id}'...]")
+                
+                try:
+                    os.makedirs("notes", exist_ok=True)
+                    prefix = "save2_history" if is_disk else "save1_session"
+                    path = os.path.join("notes", f"{prefix}_{self.session_id}.md")
+                    
+                    target_messages = self.messages
+                    if is_disk:
+                        disk_data = load_session(self.session_id)
+                        target_messages = disk_data.get("messages", [])
+
+                    with open(path, "w", encoding="utf-8") as f:
+                        header = "Complete History Export" if is_disk else "Current Session Export"
+                        f.write(f"# {header}: {self.session_title} ({self.session_id})\n\n")
+                        
+                        for m in target_messages:
+                            role = m.get('role', 'unknown').lower()
+                            content = m.get('content', '')
+                            
+                            # 1. Skip system prompts and raw tool data dumps entirely
+                            if role in ('system', 'tool'):
+                                continue
+                                
+                            # 2. Write the User or Assistant chat content
+                            if content and role in ('user', 'assistant'):
+                                f.write(f"### {role.upper()}\n{content}\n\n")
+                            
+                            # 3. Extract tool calls to create a clean "Sources Used" summary
+                            if role == 'assistant' and m.get('tool_calls'):
+                                sources = []
+                                for tc in m.get('tool_calls'):
+                                    func = tc.get('function', {})
+                                    name = func.get('name', 'unknown')
+                                    args_str = func.get('arguments', '{}')
+                                    try:
+                                        args = json.loads(args_str)
+                                        # Only extract the relevant links and queries
+                                        if name == "web_fetch":
+                                            sources.append(f"- **Fetched Link:** {args.get('url', '')}")
+                                        elif name == "web_search":
+                                            sources.append(f"- **Web Search:** '{args.get('query', '')}'")
+                                        elif name == "read_file":
+                                            sources.append(f"- **Read File:** `{args.get('file_path', '')}`")
+                                    except Exception:
+                                        pass
+                                
+                                if sources:
+                                    f.write("**Sources & Context Gathered:**\n")
+                                    f.write("\n".join(sources) + "\n\n")
+
+                    print(f"\033[92m[Success: Saved clean conversation to {path}]\033[0m")
+                except Exception as e:
+                    print(f"\033[91m[Export failure: {str(e)}]\033[0m")
+                continue
+            # ----------------------------------------------------
 
             if user_input.startswith("/delete"):
                 parts = user_input.split(maxsplit=1)
@@ -349,20 +336,14 @@ class REPLAgent(Agent):
                     print("[Error: Could not import TUIAgent from tui.py]")
                 continue
                 
-            response = self.chat(user_input)
+            self.spinner.update_msg("Agent is thinking...")
+            self.spinner.start()
+            try:
+                response = self.chat(user_input)
+            finally:
+                self.spinner.stop()
+                
             print(f"\nAgent: {response}\n")
-
-
-def build_system_prompt() -> str:
-    base_prompt = (
-        "You are Code Scout, an autonomous software engineering agent. "
-        "You have access to a local codebase. Manage your plan targets accurately."
-    )
-    agents_content = ""
-    if os.path.exists("AGENTS.md"):
-        with open("AGENTS.md", "r", encoding="utf-8") as f:
-            agents_content = f.read()
-    return f"{base_prompt}\n\n{agents_content}".strip()
 
 
 def main():

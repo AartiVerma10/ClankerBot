@@ -120,3 +120,8 @@ Updated the placeholder text in the TUI's input box to clearly show the new capa
 Updated the REPL's welcome message to show the new slash commands.
 
 Maintained the self.presentation_hook wiring so all background tool executions (like grepping or reading files) properly trigger the _emit_ui method and render cleanly in the TUI's right-hand "Tool Trace Engine" panel.
+
+have to add the spinner thingy' animation
+
+>> the notes one are saved in notes after ctrl s
+about  the save 1 and save 2 with only user 
